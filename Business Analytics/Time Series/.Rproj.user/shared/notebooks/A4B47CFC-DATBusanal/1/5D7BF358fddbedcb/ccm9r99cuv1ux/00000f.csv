@@ -1,0 +1,11 @@
+"0","# Generate predictions on test set"
+"0","predicted <- model_lstm %>% predict(test_x)"
+"1","1/2 [==============>...............] - ETA: 0s"
+"1","2/2 [==============================] - 0s 2ms/step
+"
+"1","2/2 [==============================] - 0s 2ms/step
+"
+"0","# Denormalise predictions to original scale"
+"0","predicted <- predicted * (max_price - min_price) + min_price"
+"0","# Denormalise actual test values"
+"0","test_y_actual <- test_y * (max_price - min_price) + min_price"

@@ -1,0 +1,4 @@
+"0","# Create a histogram to visualize the distribution of car prices"
+"0","ggplot(Used_cars, aes(x = `Price_in_GBP`)) +"
+"0","  geom_histogram(binwidth = 5000, fill = ""blue"", color = ""black"") +  # Plot histogram with 5000 GBP bins"
+"0","  labs(title = ""Price Distribution"", x = ""Price (£)"", y = ""Frequency"")  # Add titles and labels"

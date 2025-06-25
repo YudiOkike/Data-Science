@@ -1,0 +1,7 @@
+"0","# Perform STL decomposition to separate trend, seasonal, and remainder components"
+"0","decomposed_fuel <- stl(ts_fuel, s.window = ""periodic"")"
+"0",""
+"0","# Plot decomposed components for visual analysis"
+"0","autoplot(decomposed_fuel) +"
+"0","  ggtitle(""STL Decomposition of Weekly Fuel Price Series"") +"
+"0","  theme_minimal()"

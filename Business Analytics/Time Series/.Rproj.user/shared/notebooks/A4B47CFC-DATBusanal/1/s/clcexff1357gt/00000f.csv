@@ -1,0 +1,7 @@
+"0","# Apply log transformation to stabilise variance"
+"0","log_price <- log(ts_fuel)"
+"0","# Smooth log-transformed series using a moving average filter"
+"0","smoothed_log <- stats::filter(log_price, filter = rep(1/4, 4), sides = 2)"
+"0",""
+"0","# Plot smoothed log-transformed series for visualisation"
+"0","plot(smoothed_log, main = ""Smoothed Log-Transformed Fuel Price"", ylab = ""Log Price"", col = ""blue"")"

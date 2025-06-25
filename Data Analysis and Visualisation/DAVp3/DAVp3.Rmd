@@ -1,0 +1,255 @@
+---
+title: "DAT301_As2"
+author: "Udochukwu Okike 2423983"
+date: "2025-04-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Required Packages
+
+```{r packages}
+# Install packages if not already installed
+required_packages <- c(
+  "tidyverse", "readxl", "lubridate", "janitor", "ggplot2", "ggpubr",
+  "scales", "reshape2", "forecast", "tseries", "randomForest", "multcomp",
+  "caret", "cluster", "factoextra", "patchwork", "corrplot", "tibble"
+)
+
+installed_packages <- rownames(installed.packages())
+for (pkg in required_packages) {
+  if (!(pkg %in% installed_packages)) {
+    install.packages(pkg)
+  }
+}
+
+# Load packages
+lapply(required_packages, library, character.only = TRUE)
+```
+
+# Loading, Reading and Tidying The Dataset
+
+## Load and Inspect Data by Year
+
+```{r load-data}
+# Read data directly from Excel sheets with cleaned column names using janitor::clean_names()
+df_2019_raw <- read_excel("IGR_DATA_2019_2023.xlsx", sheet = "2019-2021", range = "B2:E39") %>% clean_names()
+df_2020_raw <- read_excel("IGR_DATA_2019_2023.xlsx", sheet = "2019-2021", range = "F2:H39") %>% clean_names()
+df_2021_raw <- read_excel("IGR_DATA_2019_2023.xlsx", sheet = "2019-2021", range = "I2:K39") %>% clean_names()
+df_2022_raw <- read_excel("IGR_DATA_2019_2023.xlsx", sheet = "2022", range = "B2:M39") %>% clean_names()
+df_2023_raw <- read_excel("IGR_DATA_2019_2023.xlsx", sheet = "2023", range = "B5:M42") %>% clean_names()
+```
+
+## Extract and Combine State, Year and Total
+
+```{r tidy-combined-minimal}
+states <- df_2019_raw$x1 %>% tolower()
+
+# Enhanced cleaning function for known inconsistencies
+clean_state <- function(x) {
+  x <- tolower(x)
+  x <- gsub("federal capital territory", "fct", x)
+  x <- gsub("kaduna\\*", "kaduna", x)
+  x <- gsub("nassarawa", "nasarawa", x)
+  return(x)
+}
+
+df_2019 <- df_2019_raw %>% mutate(state = clean_state(x1), year = 2019, total = as.numeric(total)) %>% dplyr::select(state, year, total)
+df_2020 <- df_2020_raw %>% mutate(state = clean_state(states), year = 2020, total = as.numeric(total)) %>% dplyr::select(state, year, total)
+df_2021 <- df_2021_raw %>% mutate(state = clean_state(states), year = 2021, total = as.numeric(total)) %>% dplyr::select(state, year, total)
+df_2022 <- df_2022_raw %>% mutate(state = clean_state(state), year = 2022, total = as.numeric(total)) %>% dplyr::select(state, year, total)
+df_2023 <- df_2023_raw %>% mutate(state = clean_state(state), year = 2023, total = as.numeric(total)) %>% dplyr::select(state, year, total)
+
+# Combine all
+gr_total <- bind_rows(df_2019, df_2020, df_2021, df_2022, df_2023) %>% arrange(year, state)
+```
+
+## Exploratory Data Analysis
+
+### 2.1 National Revenue Trend (2019–2023)
+
+```{r national-trend}
+gr_total %>%
+  group_by(year) %>%
+  summarise(national_total = sum(total, na.rm = TRUE)) %>%
+  ggplot(aes(x = year, y = national_total)) +
+  geom_line(size = 1.2, colour = "steelblue") +
+  geom_point(size = 3) +
+  labs(title = "National IGR Trend (2019–2023)", y = "Total IGR (₦)", x = "Year") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal()
+```
+
+### 2.2 State-by-State IGR Overview
+
+```{r allstates-bar-each-year}
+gr_total %>%
+  ggplot(aes(x = reorder(state, total), y = total, fill = state)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  facet_wrap(~ year, scales = "free") +
+  labs(title = "All States by IGR for Each Year", x = "State", y = "Total IGR (₦)") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal()
+```
+
+### 2.3 Yearly Distribution of State Revenues
+
+```{r igr-distribution}
+gr_total %>%
+  ggplot(aes(x = total)) +
+  geom_histogram(fill = "dodgerblue", bins = 30, colour = "white") +
+  facet_wrap(~ year, scales = "free") +
+  labs(title = "Distribution of IGR Across States by Year", x = "Total IGR (₦)", y = "Count of States") +
+  scale_x_continuous(labels = scales::comma) +
+  theme_minimal()
+```
+
+### 2.4 Correlation Between States Over Time
+
+```{r correlation-heatmap-clean}
+# Prepare matrix (years = rows, states = columns)
+state_matrix <- gr_total %>%
+  pivot_wider(names_from = state, values_from = total) %>%
+  column_to_rownames("year") %>%
+  as.data.frame()
+
+# Correlation matrix
+cor_states <- cor(state_matrix, use = "pairwise.complete.obs")
+
+# Abbreviate state names to 3 letters
+colnames(cor_states) <- substr(colnames(cor_states), 1, 3)
+rownames(cor_states) <- substr(rownames(cor_states), 1, 3)
+
+# Plot clean heatmap with larger tiles
+corrplot(cor_states,
+         method = "color",
+         type = "upper",
+         tl.col = "black",
+         tl.cex = 0.5,            # slightly larger text labels
+         col.lim = c(-1, 1),
+         cl.ratio = 0.50,         # slightly wider color legend
+         cl.align.text = 'l',
+         title = "Correlation Heatmap of IGR Between States (2019–2023)",
+         mar = c(1, 1, 2, 1),     # more padding around the plot
+         addgrid.col = NA)        # remove grid lines for cleaner tiles
+```
+
+## Clustering Analysis
+
+### 3.1 Identifying Revenue-Based Clusters
+
+```{r clustering-states}
+# Step 1: Compute features (mean and growth)
+gr_summary <- gr_total %>%
+  group_by(state) %>%
+  summarise(
+    avg_igr = mean(total, na.rm = TRUE),
+    growth = (total[year == 2023] - total[year == 2019]) / total[year == 2019]
+  ) %>%
+  drop_na()
+
+# Step 2: Standardise data
+scaled_features <- scale(gr_summary[, c("avg_igr", "growth")])
+
+# Step 3: Elbow method to choose optimal k
+fviz_nbclust(scaled_features, kmeans, method = "wss") +
+  labs(
+    title = "Elbow Method: Optimal Number of Clusters",
+    subtitle = "The bend (elbow) at k = 3 suggests this is the ideal number of clusters",
+    x = "Number of Clusters (k)",
+    y = "Total Within-Cluster Sum of Squares"
+  ) +
+  theme_minimal()
+
+# Step 4: K-means clustering (k = 3 for now)
+k_res <- kmeans(scaled_features, centers = 3, nstart = 25)
+gr_summary$cluster <- as.factor(k_res$cluster)
+
+# Step 5: Visualise clusters with clearer labels
+
+# Add cluster labels and scaled values to gr_summary
+gr_summary <- gr_summary %>%
+  mutate(cluster = as.factor(k_res$cluster),
+         avg_igr_scaled = scaled_features[, "avg_igr"],
+         growth_scaled = scaled_features[, "growth"])
+
+# Custom ggplot cluster visualisation
+ggplot(gr_summary, aes(x = avg_igr_scaled, y = growth_scaled, colour = cluster, label = state)) +
+  geom_point(size = 3) +
+  ggrepel::geom_text_repel(show.legend = FALSE, size = 5.5, max.overlaps = 50, force = 2) +
+  labs(
+    title = "Clusters of Nigerian States by Avg IGR & Growth",
+    subtitle = "Clustered based on average IGR and 5-year growth trend",
+    x = "Scaled Average IGR",
+    y = "Scaled Growth Rate"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+### 3.2 Statistical Comparison Between Clusters
+
+```{r anova-tukey-test}
+# ANOVA: Is avg IGR different across clusters?
+anova_model <- aov(avg_igr ~ cluster, data = gr_summary)
+summary(anova_model)
+
+# Post-hoc test: Tukey HSD
+TukeyHSD(anova_model)
+
+# Visualise differences in avg IGR
+ggboxplot(gr_summary, x = "cluster", y = "avg_igr", fill = "cluster", palette = "jco") +
+  labs(title = "Comparison of Average IGR Across Clusters",
+       x = "Cluster", y = "Average IGR (₦)") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal()
+```
+
+## Forecasting National IGR (2024–2025)
+
+```{r ets-national-forecast}
+# Step 1: Aggregate national total IGR by year
+national_igr <- gr_total %>%
+  group_by(year) %>%
+  summarise(total_igr = sum(total, na.rm = TRUE))
+
+# Step 2: Convert to time series object
+ts_national <- ts(national_igr$total_igr, start = 2019, frequency = 1)
+
+# Step 3: Fit ETS model and forecast
+ts_model <- ets(ts_national)
+ts_forecast <- forecast(ts_model, h = 2)
+
+# Step 4: Create combined data frame with actual + forecast
+forecast_df <- data.frame(
+  year = 2019:2025,
+  total_igr = c(as.numeric(ts_national), as.numeric(ts_forecast$mean)),
+  lower = c(rep(NA, length(ts_national)), ts_forecast$lower[,2]),
+  upper = c(rep(NA, length(ts_national)), ts_forecast$upper[,2]),
+  type = c(rep("actual", length(ts_national)), rep("forecast", 2))
+)
+
+# Plot with continuous line and separate point colours
+ggplot(forecast_df, aes(x = year, y = total_igr)) +
+  geom_line(size = 1, colour = "steelblue") +  # continuous line
+  geom_point(aes(colour = type), size = 3) +
+  geom_ribbon(
+    data = subset(forecast_df, type == "forecast"),
+    aes(ymin = lower, ymax = upper),
+    fill = "cyan", alpha = 0.2
+  ) +
+  scale_colour_manual(values = c("actual" = "tomato", "forecast" = "dodgerblue")) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_continuous(breaks = 2019:2025) +
+  labs(
+    title = "ETS Forecast of National IGR (2019–2025)",
+    x = "Year",
+    y = "Total IGR (₦)",
+    colour = "Type"
+  ) +
+  theme_minimal()
+```

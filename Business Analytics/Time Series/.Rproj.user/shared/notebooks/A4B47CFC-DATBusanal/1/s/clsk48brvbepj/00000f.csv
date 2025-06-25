@@ -1,0 +1,6 @@
+"0","# Plot training and test sets to visualise the split"
+"0","ts.plot(train_ts, test_ts,"
+"0","        col = c(""skyblue"", ""red""),"
+"0","        lty = 1:2, lwd = 2,"
+"0","        main = ""Train vs Test Split of Weekly Fuel Prices"","
+"0","        ylab = ""Fuel Price"", xlab = ""Time"")"

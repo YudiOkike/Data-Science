@@ -1,0 +1,51 @@
+"0",""
+"0","# Align column names of Autouncle data with CarSite data"
+"0","auto_cars_aligned <- auto_cars %>%"
+"0","  rename("
+"0","    Car_Brand = Car_brand,              # Rename to match CarSite"
+"0","    Car_Model = Car_model,              # Rename to match CarSite"
+"0","    Car_Type = `Car Type`,              # Rename to match CarSite"
+"0","    `Mileage (miles)` = Mileage         # Rename to match CarSite"
+"0","  ) %>%"
+"0","  select("
+"0","    Car_Brand, Car_Model, Year, Car_Type, `Price (£)`, `Mileage (miles)`, Transmission, Fuel, `Engine_Size (cc)`"
+"0","  )  # Select and order columns to match CarSite"
+"0",""
+"0","# Ensure Year is numeric in both datasets"
+"0","carsite_cleaned <- carsite_cleaned %>% mutate(Year = as.numeric(Year))"
+"0","auto_cars_aligned <- auto_cars_aligned %>% mutate(Year = as.numeric(Year))"
+"0",""
+"0","# Combine the two datasets and standardize column names"
+"0","Used_cars <- bind_rows(carsite_cleaned, auto_cars_aligned) %>%"
+"0","  rename("
+"0","    Price_in_GBP = `Price (£)`,           # Rename with more descriptive name"
+"0","    Mileage_in_miles = `Mileage (miles)`, # Rename with more descriptive name"
+"0","    Engine_Size_in_cc = `Engine_Size (cc)` # Rename with more descriptive name"
+"0","  ) %>%"
+"0","  select(Car_Brand, Car_Model, Year, Car_Type, Price_in_GBP, Mileage_in_miles, Transmission, Fuel, Engine_Size_in_cc) %>%"
+"0","  drop_na()  # Remove rows with any missing values"
+"0",""
+"0","View(Used_cars)  # Display the merged dataset"
+"0","skim(Used_cars)  # Generate summary statistics"
+"1","── Data Summary ────────────────────────
+"
+"1","                           Values   
+"
+"1","Name                       Used_cars
+"
+"1","Number of rows             139      
+"
+"1","Number of columns          9        
+"
+"1","_______________________             
+"
+"1","Column type frequency:              
+"
+"1","  character                5        
+"
+"1","  numeric                  4        
+"
+"1","________________________            
+"
+"1","Group variables            None     
+"

@@ -1,0 +1,152 @@
+install.packages("rpart")
+install.packages("caret")
+library(rpart)
+library(caret)
+
+data(iris)
+str(iris)
+summary(iris)
+View(iris)
+
+set.seed(123) # for reproducibility
+
+trainIndex <- createDataPartition(iris$Species, p = 0.7, list = FALSE, times = 1)
+trainData <- iris[trainIndex, ]
+testData <- iris[-trainIndex, ]
+
+#create a Decision Tree Model using the training data.
+tree_model <- rpart(Species ~ ., data = trainData, method = "class")
+
+#Plot the Tree
+plot (tree_model, uniform = TRUE, main = "Decision Tree for Iris Train Data")
+text (tree_model, use.n = TRUE, all = TRUE, cex = .8)
+
+#Make Predictions on the Test Data
+predictions <- predict(tree_model, testData, type = "class")
+predictions  # To view predicted values
+
+#Evaluate the Model- Confusion Matrix
+confusionMatrix <- table(predictions, testData$Species)
+confusionMatrix
+
+#Evaluate the model with Accuracy
+accuracy <- sum(diag(confusionMatrix)) / sum(confusionMatrix)
+accuracy
+
+
+##############################################################################
+
+# Load required libraries
+library(e1071)  # for SVM
+library(caret)  # for data partitioning
+
+# Data preparation (same as provided)
+data(iris)
+set.seed(123)  # for reproducibility
+trainIndex <- createDataPartition(iris$Species, p = 0.7, list = FALSE, times = 1)
+trainData <- iris[trainIndex, ]
+testData <- iris[-trainIndex, ]
+
+# Create SVM model with linear kernel
+svm_model <- svm(Species ~ ., 
+                 data = trainData, 
+                 kernel = "linear",
+                 type = "C-classification")
+
+# Make predictions on test data
+predictions <- predict(svm_model, testData)
+
+# Evaluate the model - Confusion Matrix
+confusionMatrix <- table(Predicted = predictions, Actual = testData$Species)
+print("Confusion Matrix:")
+print(confusionMatrix)
+
+# Calculate accuracy
+accuracy <- sum(diag(confusionMatrix)) / sum(confusionMatrix)
+print(paste("Accuracy:", round(accuracy, 4)))
+
+# Optional: Print model summary
+summary(svm_model)
+
+##################################################################################################
+
+# Load required libraries
+library(randomForest)  # for Random Forest
+library(caret)        # for data partitioning
+
+# Data preparation (same as provided)
+data(iris)
+set.seed(123)  # for reproducibility
+trainIndex <- createDataPartition(iris$Species, p = 0.7, list = FALSE, times = 1)
+trainData <- iris[trainIndex, ]
+testData <- iris[-trainIndex, ]
+
+# Function to train and evaluate Random Forest model
+train_and_evaluate_rf <- function(ntree_val) {
+  # Create Random Forest model
+  rf_model <- randomForest(Species ~ ., 
+                           data = trainData, 
+                           ntree = ntree_val,
+                           importance = TRUE)
+  
+  # Make predictions on test data
+  predictions <- predict(rf_model, testData)
+  
+  # Evaluate the model - Confusion Matrix
+  confusionMatrix <- table(Predicted = predictions, Actual = testData$Species)
+  
+  # Calculate accuracy
+  accuracy <- sum(diag(confusionMatrix)) / sum(confusionMatrix)
+  
+  # Print results
+  cat("\nRandom Forest with ntree =", ntree_val, "\n")
+  cat("Confusion Matrix:\n")
+  print(confusionMatrix)
+  cat("Accuracy:", round(accuracy, 4), "\n")
+  
+  return(rf_model)
+}
+
+# Train and evaluate models with different ntree values
+rf_100 <- train_and_evaluate_rf(100)
+rf_200 <- train_and_evaluate_rf(200)
+rf_500 <- train_and_evaluate_rf(500)
+
+# Variable importance plot for the model with ntree = 500
+varImpPlot(rf_500, main = "Variable Importance Plot (ntree = 500)")
+
+#######################################################################################################
+
+# Step 1: Install necessary libraries if not already installed
+if (!require(ggplot2)) install.packages("ggplot2")
+if (!require(cluster)) install.packages("cluster")
+
+# Step 2: Load the Dataset
+data(iris)
+iris
+
+# Step 3: Prepare the Data
+
+iris_clustering <- iris[, -5] 
+iris_clustering
+
+# Step 4: Compute Total Within-Cluster Sum of Square
+wss <- numeric(15)
+for (i in 1:15) {
+  wss[i] <- sum(kmeans(iris_clustering, centers=i, nstart = 20)$withinss)
+}
+
+# Step 5: Plot the Elbow Curve
+plot (1:15, wss, type="b", xlab="Number of clusters", ylab="within groups sum of squares")
+
+# Step 6: Perform K-Means Clustering with Optimal k
+# Assuming the optimal number of clusters from the elbow method is 3
+set.seed (123) # Ensure reproducibility
+optimal_kmeans_result <- kmeans(iris_clustering, centers = 3, nstart=20)
+
+# Step 7: Visualize the Clusters
+library(ggplot2)
+iris_clustered <- data.frame(iris_clustering, cluster = factor (optimal_kmeans_result$cluster))
+ggplot(iris_clustered, aes(Sepal.Length, Sepal.Width, color = cluster)) +
+  geom_point() + theme_minimal()
+

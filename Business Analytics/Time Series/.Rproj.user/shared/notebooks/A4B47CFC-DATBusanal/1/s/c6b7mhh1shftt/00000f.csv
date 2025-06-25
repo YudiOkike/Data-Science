@@ -1,0 +1,4 @@
+"0","# Set up plot layout for side-by-side ACF and PACF plots"
+"0","par(mfrow = c(1, 2))"
+"0","# Plot Autocorrelation Function (ACF) to identify lag patterns"
+"0","acf(diff_fuel, main = ""ACF of Differenced Series"")"

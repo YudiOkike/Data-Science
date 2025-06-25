@@ -1,0 +1,8 @@
+"0","# Calculate accuracy metrics for SVR predictions"
+"0","svr_metrics <- data.frame("
+"0","  RMSE = round(RMSE(final_preds, actual_vals), 3),"
+"0","  MAE = round(MAE(final_preds, actual_vals), 3),"
+"0","  MAPE = round(mean(abs((final_preds - actual_vals) / actual_vals)) * 100, 2)"
+"0",")"
+"0","# Display metrics"
+"0","svr_metrics"

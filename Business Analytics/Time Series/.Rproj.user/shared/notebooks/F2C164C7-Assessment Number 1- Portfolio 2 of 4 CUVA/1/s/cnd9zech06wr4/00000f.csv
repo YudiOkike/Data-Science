@@ -1,0 +1,30 @@
+"0","# Clean and preprocess the raw CarSite data"
+"0","carsite_data <- carsite_raw %>%"
+"0","  mutate(Price = parse_number(Price),              # Convert Price to numeric, removing non-numeric characters"
+"0","         Mileage = parse_number(Mileage),          # Convert Mileage to numeric"
+"0","         Engine_Size = parse_number(Engine_Size)) %>%  # Convert Engine_Size to numeric"
+"0","  extract(Year_Model, into = c(""Year"", ""Make"", ""Model"", ""Car_Type""),  # Split Year_Model into components"
+"0","          regex = ""^\\s*(\\d{4})\\s+((?:Land\\s+Rover)|\\S+)\\s+(.+?)\\s+(\\S+)\\s*$"","
+"0","          remove = FALSE) %>%  # Use regex to extract Year, Make, Model, and Car_Type"
+"0","  mutate(Year = as.numeric(Year)) %>%              # Ensure Year is numeric"
+"0","  mutate(Fuel_Type = if_else(Fuel_Type == ""-"", ""Hybrid"", Fuel_Type))  # Replace ""-"" in Fuel_Type with ""Hybrid"""
+"2","Warning: [38;5;255mThere was 1 warning in `mutate()`.[39m
+[38;5;255m[36mℹ[38;5;255m In argument: `Engine_Size = parse_number(Engine_Size)`.[39m
+Caused by warning:
+[33m![39m 4 parsing failures.
+row col expected actual
+ 21  -- a number      -
+ 31  -- a number      -
+ 60  -- a number      -
+ 69  -- a number      -"
+"0","# Select and rename columns for consistency and clarity"
+"0","carsite_cleaned <- carsite_data %>%"
+"0","  select(Make, Model, Year, Car_Type, Price, Mileage, Transmission, Fuel_Type, Engine_Size) %>%"
+"0","  rename(Car_Brand = Make,                # Rename Make to Car_Brand"
+"0","         Car_Model = Model,              # Rename Model to Car_Model"
+"0","         `Price (£)` = Price,            # Rename Price with units"
+"0","         `Mileage (miles)` = Mileage,    # Rename Mileage with units"
+"0","         `Engine_Size (cc)` = Engine_Size,  # Rename Engine_Size with units"
+"0","         Fuel = Fuel_Type)               # Rename Fuel_Type to Fuel"
+"0",""
+"0","View(carsite_cleaned)  # Display the cleaned data"

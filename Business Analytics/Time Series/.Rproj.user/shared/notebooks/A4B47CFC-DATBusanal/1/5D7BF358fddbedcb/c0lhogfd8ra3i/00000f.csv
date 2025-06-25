@@ -1,0 +1,8 @@
+"0","# Calculate accuracy metrics for hybrid forecast"
+"0","hybrid_metrics <- data.frame("
+"0","  RMSE = round(RMSE(hybrid_df$Hybrid, hybrid_df$Actual), 3),"
+"0","  MAE = round(MAE(hybrid_df$Hybrid, hybrid_df$Actual), 3),"
+"0","  MAPE = round(mean(abs((hybrid_df$Hybrid - hybrid_df$Actual) / hybrid_df$Actual)) * 100, 2)"
+"0",")"
+"0","# Display metrics"
+"0","hybrid_metrics"

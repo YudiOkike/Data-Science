@@ -1,0 +1,3 @@
+"0","# Create hybrid forecast by averaging SVR and LSTM predictions"
+"0","hybrid_df <- hybrid_df %>%"
+"0","  mutate(Hybrid = 0.8 * SVR + 0.2 * LSTM) # Weighted in Favour of SVR"

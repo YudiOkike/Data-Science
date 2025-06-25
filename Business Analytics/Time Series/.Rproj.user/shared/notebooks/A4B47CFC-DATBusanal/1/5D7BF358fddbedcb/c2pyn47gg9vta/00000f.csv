@@ -1,0 +1,8 @@
+"0","# Create a boxplot to visualize potential outliers in avg_price"
+"0","fuel_data %>%"
+"0","  ggplot(aes(y = avg_price)) +"
+"0","  geom_boxplot(fill = ""orange"", alpha = 0.9, outlier.color = ""red"") +"
+"0","  labs(title = ""Boxplot of Weekly Average Fuel Prices"","
+"0","       y = ""Fuel Price (Pence per Litre)"","
+"0","       x = """") +"
+"0","  theme_minimal()"

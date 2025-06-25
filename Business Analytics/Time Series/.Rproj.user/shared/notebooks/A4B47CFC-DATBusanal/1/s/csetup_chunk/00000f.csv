@@ -1,0 +1,2 @@
+"0","# Configure knitr to display code in the output document"
+"0","knitr::opts_chunk$set(echo = TRUE)"

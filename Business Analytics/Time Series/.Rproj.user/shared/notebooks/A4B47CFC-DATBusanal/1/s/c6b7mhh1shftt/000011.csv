@@ -1,0 +1,2 @@
+"0","# Plot Partial Autocorrelation Function (PACF) for model order selection"
+"0","pacf(diff_fuel, main = ""PACF of Differenced Series"")"

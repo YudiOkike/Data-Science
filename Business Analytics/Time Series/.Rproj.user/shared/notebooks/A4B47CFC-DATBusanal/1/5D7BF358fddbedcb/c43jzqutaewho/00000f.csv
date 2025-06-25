@@ -1,0 +1,8 @@
+"0","# Convert fuel price to time series for analysis"
+"0","ts_y <- ts(external_merged$avg_price, frequency = 52, start = c(2021, 1))"
+"0",""
+"0","# Perform STL decomposition to analyse trend and seasonality"
+"0","stl_decomp <- stl(ts_y, s.window = ""periodic"")"
+"0","autoplot(stl_decomp) +"
+"0","  ggtitle(""STL Decomposition of Average Fuel Price (External Model)"") +"
+"0","  theme_minimal()"

@@ -1,0 +1,6 @@
+"0","# Apply first-order differencing to fuel price and exogenous variable"
+"0","diff_y <- diff(ts_y)"
+"0","diff_x <- diff(ts_x)"
+"0",""
+"0","# Plot differenced fuel price series to inspect stationarity"
+"0","autoplot(diff_y) + ggtitle(""Differenced Fuel Price"") + theme_minimal()"

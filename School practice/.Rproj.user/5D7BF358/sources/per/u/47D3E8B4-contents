@@ -1,0 +1,5 @@
+
+day <- read.csv("~/Downloads/day.csv")
+View(day)
+
+colSums(is.na(days))

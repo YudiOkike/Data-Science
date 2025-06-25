@@ -1,0 +1,90 @@
+
+#Step 1: Install and load packages
+install.packages("tidyverse")
+install.packages("lubridate")
+install.packages("keras")
+# install.packages("remotes")
+remotes::install_github("rstudio/tensorflow")
+# Install TensorFlow backend (only once)
+keras::install_keras()
+
+install.packages("keras")
+keras::install_keras(method = "auto")
+
+
+
+library(keras)
+library(tidyverse)
+library(lubridate)
+
+
+#Step 2: Prepare AirPassengers dataset
+#Convert to data frame
+df <- data.frame(
+  DATE = seq.Date(from = as.Date("1949-01-01"), by = "month", length.out = length(AirPassengers)),
+  Passengers = as.numeric(AirPassengers)
+)
+
+# Normalize the data
+scaled <- scale(df$Passengers)
+df$Scaled_Passengers <- as.numeric(scaled)
+
+#Step 3: Create lagged sequence
+look_back <- 12
+
+create_lagged_data <- function(series, look_back = 12) {
+  x <- embed(series, look_back + 1)
+  list(
+    x = x[, 2:(look_back + 1)],
+    y = x[, 1]
+  )
+}
+
+lagged <- create_lagged_data(df$Scaled_Passengers, look_back)
+
+x_data <- array(lagged$x, dim = c(nrow(lagged$x), look_back, 1))
+y_data <- lagged$y
+
+
+#Step 4: Train/Test Split
+train_size <- round(0.8 * nrow(x_data))
+
+x_train <- x_data[1:train_size,,]
+y_train <- y_data[1:train_size]
+
+x_test <- x_data[(train_size + 1):nrow(x_data),,, drop = FALSE]
+y_test <- y_data[(train_size + 1):nrow(x_data)]
+
+
+#Step 5: Build and Train the LSTM Model
+model <- keras_model_sequential() %>%
+  layer_lstm(units = 50, input_shape = c(look_back, 1)) %>%
+  layer_dense(units = 1)
+
+model %>% compile(
+  loss = "mean_squared_error",
+  optimizer = "adam"
+)
+
+model %>% fit(
+  x_train, y_train,
+  epochs = 50,
+  batch_size = 16,
+  validation_split = 0.1
+)
+
+
+
+#Step 6: Predict and Plot Results
+pred <- model %>% predict(x_test)
+
+# Inverse scaling
+pred_unscaled <- pred * attr(scaled, 'scaled:scale') + attr(scaled, 'scaled:center')
+actual_unscaled <- y_test * attr(scaled, 'scaled:scale') + attr(scaled, 'scaled:center')
+
+# Plot
+plot(actual_unscaled, type = 'l', col = 'blue', lwd = 2,
+     main = "LSTM Forecast vs Actual - AirPassengers",
+     ylab = "Number of Passengers", xlab = "Time")
+lines(pred_unscaled, col = 'red', lwd = 2)
+legend("bottomright", legend = c("Actual", "Predicted"), col = c("blue", "red"), lty = 1)

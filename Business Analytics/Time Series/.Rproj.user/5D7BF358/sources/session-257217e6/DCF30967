@@ -1,0 +1,33 @@
+{
+    "id": "DCF30967",
+    "path": "~/Desktop/rproj/busanal/TS/LP-Optimisation.Rmd",
+    "project_path": "LP-Optimisation.Rmd",
+    "type": "r_markdown",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1746978469518.0,
+    "source_on_save": true,
+    "relative_order": 9,
+    "properties": {
+        "tempName": "Untitled6",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "124,0",
+        "scrollLine": "109",
+        "last_setup_crc32": "257217e69a711b18",
+        "rmdVisualMode": "false",
+        "rmdVisualWrapConfigured": "true",
+        "docOutlineVisible": "0",
+        "rmdVisualModeLocation": "2:0",
+        "rmdVisualCollapsedChunks": ""
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1746998890,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1746998890442,
+    "read_only": false,
+    "read_only_alternatives": []
+}

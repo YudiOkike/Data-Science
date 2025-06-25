@@ -1,0 +1,8 @@
+"0","# Calculate accuracy metrics for LSTM predictions"
+"0","lstm_metrics <- data.frame("
+"0","  RMSE = round(rmse(test_y_actual, predicted), 3),"
+"0","  MAE = round(mae(test_y_actual, predicted), 3),"
+"0","  MAPE = round(mape(test_y_actual, predicted) * 100, 2)"
+"0",")"
+"0","# Display metrics"
+"0","lstm_metrics"

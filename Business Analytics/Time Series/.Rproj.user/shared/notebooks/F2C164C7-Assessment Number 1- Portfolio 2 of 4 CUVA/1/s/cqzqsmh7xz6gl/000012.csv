@@ -1,0 +1,2 @@
+"0","# Export the merged dataset to a CSV file"
+"0","write.csv(Used_cars, ""Used_cars.csv"", row.names = FALSE)"

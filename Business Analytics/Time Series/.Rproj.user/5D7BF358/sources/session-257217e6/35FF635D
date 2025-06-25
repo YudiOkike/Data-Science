@@ -1,0 +1,31 @@
+{
+    "id": "35FF635D",
+    "path": "~/Downloads/supply_chain_optimisation_report.Rmd",
+    "project_path": null,
+    "type": "r_markdown",
+    "hash": "0",
+    "contents": "",
+    "dirty": true,
+    "created": 1746654684213.0,
+    "source_on_save": false,
+    "relative_order": 10,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "190,0",
+        "scrollLine": "0",
+        "rmdVisualMode": "false",
+        "rmdVisualWrapConfigured": "true",
+        "docOutlineVisible": "1",
+        "rmdVisualModeLocation": "0:0",
+        "rmdVisualCollapsedChunks": ""
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1746877130,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1746980030075,
+    "read_only": false,
+    "read_only_alternatives": []
+}

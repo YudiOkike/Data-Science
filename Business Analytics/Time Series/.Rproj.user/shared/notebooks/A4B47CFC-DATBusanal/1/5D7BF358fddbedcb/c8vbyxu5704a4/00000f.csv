@@ -1,0 +1,34 @@
+"0","# Provide summary insights and recommendations based on model performance"
+"0","cat(""\n Summary of Insights \n"","
+"0","    ""- All three models demonstrated strong forecasting performance for short-term fuel prices.\n"","
+"0","    ""- Based on RMSE, MAE, and MAPE, SARIMAX (Internal) — which incorporates Quantity Per Transaction — delivered the most accurate predictions.\n"","
+"0","    ""- This suggests that internal consumer behaviour may provide more predictive value than external Brent price signals in the current context.\n"","
+"0","    ""\n Recommendation:\n"","
+"0","    ""- Adopt SARIMAX (Internal) for short-term weekly forecasting of fuel prices.\n"","
+"0","    ""- Continue monitoring Brent price relationships, but prioritise internal behavioural metrics where timely data is available.\n"","
+"0","    ""- Consider building hybrid models or regime-switching frameworks in future studies to dynamically adapt to shifting market drivers.\n"")"
+"1","
+ Summary of Insights 
+"
+"1"," "
+"1","- All three models demonstrated strong forecasting performance for short-term fuel prices.
+"
+"1"," "
+"1","- Based on RMSE, MAE, and MAPE, SARIMAX (Internal) — which incorporates Quantity Per Transaction — delivered the most accurate predictions.
+"
+"1"," "
+"1","- This suggests that internal consumer behaviour may provide more predictive value than external Brent price signals in the current context.
+"
+"1"," "
+"1","
+ Recommendation:
+"
+"1"," "
+"1","- Adopt SARIMAX (Internal) for short-term weekly forecasting of fuel prices.
+"
+"1"," "
+"1","- Continue monitoring Brent price relationships, but prioritise internal behavioural metrics where timely data is available.
+"
+"1"," "
+"1","- Consider building hybrid models or regime-switching frameworks in future studies to dynamically adapt to shifting market drivers.
+"

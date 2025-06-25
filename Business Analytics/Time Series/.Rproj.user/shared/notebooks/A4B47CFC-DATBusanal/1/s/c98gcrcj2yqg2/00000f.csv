@@ -1,0 +1,7 @@
+"0","# Convert avg_price and Quantity_Per_Transaction to time series objects"
+"0","ts_y <- ts(fuel_clean$avg_price, frequency = 52, start = c(2021, 1))"
+"0","ts_x <- ts(fuel_clean$Quantity_Per_Transaction, frequency = 52, start = c(2021, 1))"
+"0",""
+"0","# Perform STL decomposition on fuel price series for trend and seasonality analysis"
+"0","autoplot(stl(ts_y, s.window = ""periodic"")) +"
+"0","  ggtitle(""STL Decomposition of Fuel Prices"") + theme_minimal()"

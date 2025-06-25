@@ -1,0 +1,170 @@
+
+# Define target URL
+url <- "https://www.carsite.co.uk/used-car"
+
+# Read the HTML page
+page <- read_html(url)
+
+# Extract car names
+car_names <- page %>% html_nodes("h3.avlink a") %>% html_text()
+
+# Extract prices
+prices <- page %>% html_nodes("h4.advertprice") %>% html_text()
+
+# Extract mileage (from multiple section28 elements, selecting the second one)
+mileages <- page %>% html_nodes("div.section28.fl:nth-child(2)") %>% html_text()
+
+# Extract transmission type (first section28 element)
+transmissions <- page %>% html_nodes("div.section28.fl.mr1p:nth-child(1)") %>% html_text()
+
+# Extract fuel type (fourth section28 element)
+fuel_types <- page %>% html_nodes("div.section28.fl:nth-child(4)") %>% html_text()
+
+# Extract dealer names
+dealers <- page %>% html_nodes(".sectionRight a") %>% html_text()
+
+# Extract locations
+locations <- page %>% html_nodes(".dis-bl.section28") %>% html_text()
+
+# Extract listing URLs
+car_links <- page %>% html_nodes("h3.avlink a") %>% html_attr("href")
+
+# Display extracted data
+print(data.frame(Car=car_names, Price=prices, Mileage=mileages, Transmission=transmissions, 
+                 Fuel=fuel_types, Dealer=dealers, Location=locations, Link=car_links))
+
+
+# Print the number of elements retrieved for each field
+cat("Car Names:", length(car_names), "\n")
+cat("Prices:", length(prices), "\n")
+cat("Mileages:", length(mileages), "\n")
+cat("Transmissions:", length(transmissions), "\n")
+cat("Fuel Types:", length(fuel_types), "\n")
+cat("Dealers:", length(dealers), "\n")
+cat("Locations:", length(locations), "\n")
+cat("Links:", length(car_links), "\n")
+
+cat("Sample Car Names:", head(car_names), "\n")
+cat("Sample Prices:", head(prices), "\n")
+cat("Sample Mileages:", head(mileages), "\n")
+cat("Sample Transmissions:", head(transmissions), "\n")
+cat("Sample Fuel Types:", head(fuel_types), "\n")
+cat("Sample Dealers:", head(dealers), "\n")
+cat("Sample Locations:", head(locations), "\n")
+cat("Sample Links:", head(car_links), "\n")
+
+
+
+
+
+################################################
+
+install.packages("rvest")
+install.packages("httr")  # Useful for headers & user-agent handling
+install.packages("xml2")  # Helps with HTML parsing
+install.packages("tidyverse")
+install.packages("skimr")
+
+library(rvest)
+library(httr)
+library(xml2)
+library(dplyr)
+
+# Define the target URL
+url <- "https://www.carsite.co.uk/used-car"
+
+# Fetch the HTML content
+page <- read_html(url)
+
+# Extract car names
+car_names <- page %>% html_nodes("h3.avlink a") %>% html_text()
+
+# Extract prices
+prices <- page %>% html_nodes("h4.advertprice") %>% html_text()
+
+# Extract mileage
+mileages <- page %>% html_nodes("div.section28.fl:nth-child(2)") %>% html_text()
+
+# Extract transmission type
+transmissions <- page %>% html_nodes("div.section28.fl.mr1p:nth-child(1)") %>% html_text()
+
+# Extract fuel type
+fuel_types <- page %>% html_nodes("div.section28.fl:nth-child(4)") %>% html_text()
+
+# Extract locations (since dealers had mismatch issues)
+locations <- page %>% html_nodes(".sectionRight span.dis-bl.section28") %>% html_text()
+
+# Extract listing URLs
+car_links <- page %>% html_nodes("h3.avlink a") %>% html_attr("href")
+
+# Create a cleaned dataframe without the dealer column
+df <- data.frame(Car=car_names, Price=prices, Mileage=mileages, 
+                 Transmission=transmissions, Fuel=fuel_types, 
+                 Location=locations, Link=car_links, stringsAsFactors = FALSE)
+
+# Display cleaned dataset
+print(df)
+
+
+##############################################################################################################
+install.packages("rvest")
+install.packages("httr")  # Useful for headers & user-agent handling
+install.packages("xml2")  # Helps with HTML parsing
+
+library(rvest)
+library(httr)
+library(xml2)
+library(dplyr)
+
+
+# Function to scrape a single page
+scrape_page <- function(page_number) {
+  # Construct the URL dynamically
+  url <- paste0("https://www.carsite.co.uk/used-car/page/", page_number)
+  
+  # Read the HTML page
+  page <- read_html(url)
+  
+  # Extract car names
+  car_names <- page %>% html_nodes("h3.avlink a") %>% html_text()
+  
+  # Extract prices
+  prices <- page %>% html_nodes("h4.advertprice") %>% html_text()
+  
+  # Extract mileage
+  mileages <- page %>% html_nodes("div.section28.fl:nth-child(2)") %>% html_text()
+  
+  # Extract transmission type
+  transmissions <- page %>% html_nodes("div.section28.fl.mr1p:nth-child(1)") %>% html_text()
+  
+  # Extract fuel type
+  fuel_types <- page %>% html_nodes("div.section28.fl:nth-child(4)") %>% html_text()
+  
+  # Extract locations
+  locations <- page %>% html_nodes(".sectionRight span.dis-bl.section28") %>% html_text()
+  
+  # Extract listing URLs
+  car_links <- page %>% html_nodes("h3.avlink a") %>% html_attr("href")
+  
+  # Combine into a dataframe
+  df <- data.frame(Car=car_names, Price=prices, Mileage=mileages, 
+                   Transmission=transmissions, Fuel=fuel_types, 
+                   Location=locations, Link=car_links, stringsAsFactors = FALSE)
+  
+  return(df)
+}
+
+# Scrape multiple pages (adjust range as needed)
+all_cars <- bind_rows(lapply(1:5, scrape_page))  # Scraping first 5 pages
+
+# Display final dataset
+print(all_cars)
+View(all_cars)
+
+library(skimr)
+skim(all_cars)
+
+rm(list = ls())
+gc()
+
+

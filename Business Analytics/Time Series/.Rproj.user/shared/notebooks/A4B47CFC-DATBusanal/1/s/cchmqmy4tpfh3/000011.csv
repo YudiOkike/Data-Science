@@ -1,0 +1,8 @@
+"0",""
+"0","# Apply interpolation to replace outliers with interpolated values"
+"0","fuel_data$interpolated <- fuel_data$avg_price"
+"0","fuel_data$interpolated[outlier_idx] <- NA"
+"0","fuel_data$interpolated <- zoo::na.approx(fuel_data$interpolated, na.rm = FALSE)"
+"0",""
+"0","# Compare original, winsorised, and interpolated values for outliers"
+"0","fuel_data[outlier_idx, c(""Date"", ""avg_price"", ""winsorised"", ""interpolated"")]"

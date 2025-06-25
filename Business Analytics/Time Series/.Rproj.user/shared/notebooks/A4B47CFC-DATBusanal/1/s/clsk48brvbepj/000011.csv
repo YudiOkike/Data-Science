@@ -1,0 +1,2 @@
+"0","# Add legend to distinguish training and test sets"
+"0","legend(""topleft"", legend = c(""Training Set"", ""Test Set""), col = c(""skyblue"", ""red""), lty = 1:2, lwd = 2)"

@@ -1,0 +1,6 @@
+"0","total_qty <- sum(df_lp$Quantity)"
+"0","total_cost <- sum(df_lp$Cost)"
+"0","total_risk <- sum(df_lp$Risk_Score)"
+"0","total_adjusted_qty <- sum(df_lp$Quantity * df_lp$Risk_Adjusted_Efficiency)"
+"0",""
+"0","print(df_lp %>% select(SKU, Supplier, Route, Quantity, Cost, Risk_Score, Risk_Adjusted_Efficiency))"

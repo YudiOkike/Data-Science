@@ -1,0 +1,124 @@
+---
+title: "Optimisation - Inventory Allocation with Risk Adjustment"
+author: "Udochukwu Okike 2423983"
+date: "2025-05-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+packages <- c("tidyverse", "lpSolve", "ggplot2", "readr")
+lapply(packages, function(pkg) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  }
+})
+```
+
+## 1. Load and Prepare Data
+
+```{r load-data}
+opt_data <- read_csv("supply_chain_data.csv")
+head(opt_data)
+```
+
+## 2. Feature Engineering for Quantity-Based Optimisation
+
+```{r feature-engineering}
+# Create risk-adjusted delivery factor
+opt_data <- opt_data %>%
+  mutate(
+    Transport_Risk = case_when(
+      `Transportation modes` == "Air"  ~ 1,
+      `Transportation modes` == "Road" ~ 2,
+      `Transportation modes` == "Rail" ~ 3,
+      TRUE ~ 2
+    ),
+    Inspection_Fail = ifelse(`Inspection results` == "Fail", 1, 0),
+    Risk_Score = 0.5 * `Defect rates` + 0.3 * Inspection_Fail + 0.2 * Transport_Risk,
+    Risk_Adjusted_Efficiency = (1 - Risk_Score),
+    SKU_ID = as.integer(factor(SKU)),
+    Supplier_ID = as.integer(factor(`Supplier name`))
+  )
+
+opt_df <- opt_data %>%
+  select(SKU, SKU_ID, Supplier = `Supplier name`, Supplier_ID, Route = Routes,
+         Cost = Costs, Quantity = `Order quantities`, Risk_Score, Risk_Adjusted_Efficiency)
+
+head(opt_df)
+```
+
+## 3. Build Optimisation Model: Maximise Risk-Adjusted Fulfilment
+
+```{r lp-optimisation}
+n <- nrow(opt_df)
+
+# Objective: Maximise quantity delivered × (1 - risk)
+f.obj <- opt_df$Quantity * opt_df$Risk_Adjusted_Efficiency
+
+# Constraints:
+# 1. Total cost ≤ budget
+budget_limit <- 50000  # arbitrary demo value — can adjust based on analysis
+f.con1 <- opt_df$Cost
+f.dir1 <- "<="
+f.rhs1 <- budget_limit
+
+# 2. Supply limit per supplier (max 3 SKUs per supplier)
+supplier_matrix <- sapply(unique(opt_df$Supplier_ID), function(id) as.numeric(opt_df$Supplier_ID == id)) %>% t()
+supplier_cap <- rep(3, nrow(supplier_matrix))
+
+# 3. One assignment per SKU (limit duplication if needed)
+sku_matrix <- sapply(unique(opt_df$SKU_ID), function(id) as.numeric(opt_df$SKU_ID == id)) %>% t()
+sku_cap <- rep(1, nrow(sku_matrix))
+
+# Combine all constraints
+f.con <- rbind(f.con1, supplier_matrix, sku_matrix)
+f.dir <- c(f.dir1, rep("<=", length(supplier_cap)), rep("<=", length(sku_cap)))
+f.rhs <- c(f.rhs1, supplier_cap, sku_cap)
+
+# Binary decision vector (select or skip)
+f.bin <- rep(1, n)
+
+# Solve LP
+solution <- lp("max", f.obj, f.con, f.dir, f.rhs, binary.vec = 1:n)
+
+if (solution$status == 0) {
+  selected <- opt_df[which(solution$solution == 1), ]
+  df_lp <- selected
+  cat("Optimisation successful.\n")
+} else {
+  stop("Optimisation failed. Status code: ", solution$status)
+}
+```
+
+## 4. Results Summary
+
+```{r results-summary}
+total_qty <- sum(df_lp$Quantity)
+total_cost <- sum(df_lp$Cost)
+total_risk <- sum(df_lp$Risk_Score)
+total_adjusted_qty <- sum(df_lp$Quantity * df_lp$Risk_Adjusted_Efficiency)
+
+print(df_lp %>% select(SKU, Supplier, Route, Quantity, Cost, Risk_Score, Risk_Adjusted_Efficiency))
+
+cat("\nTotal Quantity Ordered:", total_qty,
+    "\nTotal Cost:", round(total_cost, 2),
+    "\nTotal Risk Score:", round(total_risk, 2),
+    "\nRisk-Adjusted Delivery Total:", round(total_adjusted_qty, 2))
+```
+
+## 5. Visual Summary
+
+```{r comparison-plot}
+# Barplot by supplier
+supplier_plot <- df_lp %>%
+  group_by(Supplier) %>%
+  summarise(Adjusted_Delivery = sum(Quantity * Risk_Adjusted_Efficiency))
+
+ggplot(supplier_plot, aes(x = reorder(Supplier, -Adjusted_Delivery), y = Adjusted_Delivery)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Risk-Adjusted Quantity Delivered by Supplier",
+       x = "Supplier", y = "Adjusted Quantity") +
+  theme_minimal()
+```

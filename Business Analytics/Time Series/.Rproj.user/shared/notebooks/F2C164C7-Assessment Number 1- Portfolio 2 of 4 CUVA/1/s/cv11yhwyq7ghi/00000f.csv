@@ -1,0 +1,16 @@
+"0","# Function to create a scatter plot with a trend line for two variables"
+"0","scatter_plot <- function(Used_cars, x_var, y_var) {"
+"0","  Used_cars %>%"
+"0","    ggplot(aes_string(x = x_var, y = y_var)) +  # Use aes_string for dynamic column names"
+"0","    geom_point(color = ""blue"", alpha = 0.05) +   # Plot points with transparency"
+"0","    geom_smooth(method = ""lm"", se = FALSE, color = ""red"") +  # Add linear trend line without confidence interval"
+"0","    labs(title = paste(""Scatterplot of"", y_var, ""vs"", x_var),  # Dynamic title"
+"0","         x = x_var, y = y_var) +                       # Axis labels"
+"0","    theme_minimal()  # Use minimal theme"
+"0","}"
+"0",""
+"0","# Generate scatter plots for key relationships"
+"0","Used_cars %>% scatter_plot(""Mileage_in_miles"", ""Price_in_GBP"")  # Mileage vs Price"
+"2","Warning: `aes_string()` was deprecated in ggplot2 3.0.0.
+Please use tidy evaluation idioms with `aes()`. 
+See also `vignette(""ggplot2-in-packages"")` for more information."

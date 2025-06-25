@@ -1,0 +1,8 @@
+"0","# Create full fuel price time series"
+"0","ts_full <- ts(fuel_clean$avg_price, frequency = 52, start = c(2021, 1))"
+"0",""
+"0","# Extract full Brent Crude series as exogenous regressor"
+"0","xreg_external_full <- external_merged$Brent_Price"
+"0",""
+"0","# Fit SARIMAX (Brent) using auto.arima on full dataset"
+"0","model_sarimax_best <- auto.arima(ts_full, xreg = xreg_external_full, seasonal = TRUE)"

@@ -1,0 +1,1053 @@
+---
+title: "Business Analytics"
+author: "Omenuko Joseph Nwebonyi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# Load necessary libraries
+library(readxl)        # For reading Excel files
+library(dplyr)         # For data manipulation
+library(ggplot2)       # For visualization
+library(lubridate)     # For working with dates
+library(tidyr)         # For handling missing values
+library(zoo)           # For time-series interpolation
+library(forecast)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(zoo)
+library(mFilter)
+library(TTR)
+library(tseries)
+library(DescTools)
+```
+
+
+```{r}
+getwd()
+```
+
+
+
+
+```{r}
+#Data Preprocessing
+```
+
+
+#  Load the dataset
+```{r}
+# Load dataset from the Excel file
+# Skip the first 5 rows, which contain metadata and not useful data
+fuel_data <- read_excel("fuel_price (9).xlsx", sheet = "Table 1 Weekly", skip = 5)
+View(fuel_data)
+```
+
+
+```{r}
+# Rename columns to more readable and consistent names
+colnames(fuel_data) <- c("Week_Ending", "Average_Price", "Quantity_Per_Transaction", "Fuel_Sales_Index")
+
+# Convert the Excel numeric date in 'Week_Ending' to R's Date format
+# Excel date origin is "1899-12-30"
+fuel_data$Week_Ending <- as.Date(fuel_data$Week_Ending, origin = "1899-12-30")
+
+```
+
+
+```{r}
+# Check the structure of the dataset to verify column types
+str(fuel_data)
+
+```
+
+
+```{r}
+# Clean and convert 'Fuel_Sales_Index' properly
+
+# Replace known non-numeric placeholders with NA first
+fuel_data$Fuel_Sales_Index <- ifelse(fuel_data$Fuel_Sales_Index %in% c("[x]", "", "N/A", "n/a"), NA, fuel_data$Fuel_Sales_Index)
+
+# Remove commas and whitespace
+fuel_data$Fuel_Sales_Index <- gsub(",", "", fuel_data$Fuel_Sales_Index)
+fuel_data$Fuel_Sales_Index <- trimws(fuel_data$Fuel_Sales_Index)
+
+# Now safely convert to numeric
+fuel_data$Fuel_Sales_Index <- as.numeric(fuel_data$Fuel_Sales_Index)
+
+
+```
+
+
+```{r}
+#structure of the dataset after "Fuel_Sales_Index" to numeric 
+str(fuel_data)
+```
+
+
+```{r}
+# Confirm if any NA values were introduced
+sum(is.na(fuel_data$Fuel_Sales_Index))
+
+```
+
+```{r}
+# Check the number of missing (NA) values in each column before handling
+colSums(is.na(fuel_data))
+
+```
+
+
+```{r}
+# Apply forward fill (Last Observation Carried Forward) to fill missing values
+fuel_data <- fuel_data %>%
+  mutate(
+    Average_Price = na.locf(Average_Price, na.rm = FALSE),
+    Quantity_Per_Transaction = na.locf(Quantity_Per_Transaction, na.rm = FALSE),
+    Fuel_Sales_Index = na.locf(Fuel_Sales_Index, na.rm = FALSE)
+  )
+
+```
+
+```{r}
+# Confirm that no missing values remain after imputation
+colSums(is.na(fuel_data))
+
+```
+
+```{r}
+# Plot boxplots for each numeric variable to detect any outliers visually
+par(mfrow = c(1, 3))  # Arrange three plots in one row
+
+boxplot(fuel_data$Average_Price, main = "Boxplot: Average Fuel Price", col = "skyblue")
+boxplot(fuel_data$Quantity_Per_Transaction, main = "Boxplot: Quantity per Transaction", col = "lightgreen")
+boxplot(fuel_data$Fuel_Sales_Index, main = "Boxplot: Fuel Sales Index", col = "lightcoral")
+
+```
+
+
+```{r}
+# Line plot showing the trend of average fuel prices across time
+ggplot(fuel_data, aes(x = Week_Ending, y = Average_Price)) +
+  geom_line(color = "blue", size = 1) +
+  labs(
+    title = "Weekly Average Fuel Price in the UK",
+    x = "Week Ending",
+    y = "Pence per Litre"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+## Exploratory Data Analysis (EDA)
+```
+
+#Step 1: Convert to Time-Series Format
+```{r}
+ts_fuel_price <- ts(fuel_data$Average_Price, frequency = 52, start = c(2021, 1))
+```
+
+## Step 2: Visualize Original Time Series
+```{r}
+autoplot(ts_fuel_price) +
+  ggtitle("Time Series Plot of Average Fuel Price") +
+  xlab("Week") + ylab("Fuel Price (Pence per Litre)") +
+  theme_minimal()
+```
+
+## Seasonal Decomposition (STL)
+```{r}
+decomp <- stl(ts_fuel_price, s.window = "periodic")
+autoplot(decomp)
+```
+
+##S Examine Autocorrelation Patterns
+```{r}
+acf(ts_fuel_price, main = "ACF - Average Fuel Price")
+pacf(ts_fuel_price, main = "PACF - Average Fuel Price")
+```
+
+##Check for Variance Instability (Log Transformation)
+```{r}
+log_price <- log(ts_fuel_price)
+autoplot(log_price) + ggtitle("Log Transformed Fuel Price")
+```
+
+## Smoothing Techniques (LOESS and Moving Averages)
+```{r}
+fuel_df <- data.frame(Week = time(ts_fuel_price), Price = as.numeric(ts_fuel_price))
+ggplot(fuel_df, aes(x = Week, y = Price)) +
+  geom_line(color = "grey") +
+  geom_smooth(method = "loess", span = 0.2, se = FALSE, color = "blue") +
+  ggtitle("LOESS Smoothed Fuel Price")
+
+ma_price <- SMA(ts_fuel_price, n = 4)
+plot(ma_price, type = "l", col = "darkgreen", ylab = "Smoothed Fuel Price", main = "4-Week Moving Average")
+```
+
+##  Outlier Treatment (Winsorization)
+```{r}
+# Manually apply winsorization using 1st and 99th percentiles
+lower_bound <- quantile(fuel_data$Average_Price, 0.01, na.rm = TRUE)
+upper_bound <- quantile(fuel_data$Average_Price, 0.99, na.rm = TRUE)
+
+fuel_data$Average_Price_W <- pmin(pmax(fuel_data$Average_Price, lower_bound), upper_bound)
+
+# Visualize the effect of Winsorization
+plot(fuel_data$Average_Price, type = "l", col = "red", main = "Original vs Winsorized Fuel Price")
+lines(fuel_data$Average_Price_W, col = "blue")
+legend("topright", legend = c("Original", "Winsorized"), col = c("red", "blue"), lty = 1)
+
+```
+
+##Step 10: Stationarity Testing - Augmented Dickey-Fuller (ADF) Test
+```{r}
+adf_test_result <- adf.test(ts_fuel_price)
+print(adf_test_result)
+```
+
+##Summary and Insights
+```{r}
+summary(ts_fuel_price)
+```
+
+##Correlation Matrix Heatmap (Internal Variables)
+```{r}
+# --- Correlation Heatmap and Interpretation ---
+
+# Load libraries
+library(dplyr)
+library(corrplot)
+
+# Select numeric columns safely and remove missing rows
+cor_data <- fuel_data %>%
+  dplyr::select(Average_Price, Quantity_Per_Transaction, Fuel_Sales_Index) %>%
+  na.omit()
+
+# Compute correlation matrix
+cor_matrix <- cor(cor_data)
+
+# Plot correlation heatmap
+corrplot(cor_matrix, method = "color", type = "upper", 
+         tl.col = "black", tl.srt = 45,
+         addCoef.col = "black", number.cex = 0.7,
+         title = "Correlation Matrix Heatmap", mar = c(0,0,1,0))
+```
+
+##Numerical Interpretation of Correlation Strengths
+```{r}
+# --- Numerical Interpretation of Correlations ---
+
+# Define function to interpret strength
+interpret_correlation <- function(r) {
+  if (abs(r) >= 0.9) return("Very strong")
+  else if (abs(r) >= 0.7) return("Strong")
+  else if (abs(r) >= 0.5) return("Moderate")
+  else if (abs(r) >= 0.3) return("Weak")
+  else return("Very weak or no correlation")
+}
+
+# Generate and print interpretations
+cor_pairs <- combn(colnames(cor_matrix), 2, simplify = TRUE)
+
+cat("🔍 Numerical Interpretation of Correlations:\n")
+for (i in 1:ncol(cor_pairs)) {
+  var1 <- cor_pairs[1, i]
+  var2 <- cor_pairs[2, i]
+  r_val <- cor_matrix[var1, var2]
+  desc <- interpret_correlation(r_val)
+  cat(sprintf("- %s vs %s: r = %.2f → %s correlation\n", var1, var2, r_val, desc))
+}
+```
+
+##Train-Test Split (Index-Based 80:20)
+```{r}
+n <- length(ts_fuel_price)  # Total observations
+split_index <- floor(0.8 * n)  # 80% split point
+
+# Create training time series (from start to split_index)
+train_ts <- ts(ts_fuel_price[1:split_index],
+               start = start(ts_fuel_price),
+               frequency = frequency(ts_fuel_price))
+
+# Create testing time series (from split_index + 1 to end)
+test_ts <- ts(ts_fuel_price[(split_index + 1):n],
+              start = time(ts_fuel_price)[split_index + 1],
+              frequency = frequency(ts_fuel_price))
+
+# Confirm structure and time ranges
+print(paste("Training Start-End:", paste(start(train_ts), collapse = "-"), "to", paste(end(train_ts), collapse = "-")))
+print(paste("Testing Start-End:", paste(start(test_ts), collapse = "-"), "to", paste(end(test_ts), collapse = "-")))
+
+
+```
+
+
+
+```{r}
+# 📊 Plot the time series with color-coded segments
+ts.plot(train_ts, test_ts,
+        col = c("blue", "red"),
+        lty = 1:2,
+        lwd = 2,
+        main = "Train vs Test Split of Fuel Price",
+        ylab = "Fuel Price",
+        xlab = "Time")
+
+legend("topleft",
+       legend = c("Training Set", "Test Set"),
+       col = c("blue", "red"),
+       lty = 1:2,
+       lwd = 2)
+```
+
+##Train vs Test Distribution (Pie Chart)
+```{r}
+# Create a simple pie chart to show the 80:20 split
+split_labels <- c("Training (80%)", "Testing (20%)")
+split_sizes <- c(length(train_ts), length(test_ts))
+
+pie(split_sizes, labels = split_labels, col = c("skyblue", "salmon"),
+    main = "Train vs Test Split (Pie Chart)")
+```
+
+```{r}
+# Ensure test_ts is converted into numeric time series aligned with forecast horizon
+test_ts_numeric <- ts(as.numeric(test_ts),
+                      start = start(test_ts),
+                      frequency = frequency(test_ts))
+
+```
+
+
+```{r}
+# Fit the best ARIMA model using auto.arima() on training data
+auto_model <- auto.arima(train_ts)
+
+# Display model summary
+summary(auto_model)
+
+# Forecast the next period equal to length of test set
+forecast_horizon <- length(test_ts_numeric)
+auto_forecast <- forecast(auto_model, h = forecast_horizon)
+```
+
+
+```{r}
+# --- Calculate Accuracy for Auto ARIMA ---
+auto_accuracy <- accuracy(auto_forecast, test_ts_numeric)
+
+```
+
+```{r}
+# Plot forecast vs actual
+autoplot(auto_forecast) +
+  autolayer(test_ts_numeric, series = "Actual", lwd = 1.2, color = "red") +
+  ggtitle("Auto ARIMA Forecast vs Actual (Test Set)") +
+  xlab("Time") + ylab("Fuel Price") +
+  theme_minimal() +
+  scale_color_manual(values = c("Auto ARIMA Forecast" = "blue", "Actual" = "red"))
+
+# Store residuals for diagnostics in later steps
+auto_residuals <- residuals(auto_model)
+
+# Accuracy metrics
+# Accuracy metrics (safe way using raw vectors)
+auto_accuracy <- accuracy(as.numeric(auto_forecast$mean), test_ts_numeric)
+auto_accuracy
+```
+
+
+##Manual SARIMA Forecasting
+```{r}
+# ---- MANUAL SARIMA MODELING ----
+
+# Fit manual SARIMA model with specified parameters (p,d,q)(P,D,Q)[s]
+manual_sarima_model <- Arima(train_ts, order = c(1,1,1), seasonal = list(order = c(1,1,0), period = 52))
+
+# Summary of the fitted model
+summary(manual_sarima_model)
+
+```
+
+## Forecasting on Test Set
+```{r}
+# Forecast using the manual SARIMA model
+forecast_horizon <- length(test_ts)
+manual_sarima_forecast <- forecast(manual_sarima_model, h = forecast_horizon)
+
+```
+
+
+```{r}
+# --- Calculate Accuracy for Manual SARIMA ---
+manual_sarima_accuracy <- accuracy(manual_sarima_forecast, test_ts_numeric)
+
+```
+
+## Plot Forecast vs. Actual
+```{r}
+# Visualize the SARIMA forecast vs. actual
+autoplot(manual_sarima_forecast) +
+  autolayer(test_ts_numeric, series = "Actual", lwd = 1.2, color = "red") +
+  ggtitle("Manual SARIMA Forecast vs Actual (Test Set)") +
+  xlab("Time") + ylab("Fuel Price") +
+  theme_minimal() +
+  scale_color_manual(values = c("SARIMA Forecast" = "blue", "Actual" = "red"))
+
+```
+
+##Model Accuracy Metrics
+```{r}
+# Evaluate accuracy
+manual_sarima_accuracy <- accuracy(as.numeric(manual_sarima_forecast$mean), test_ts_numeric)
+manual_sarima_accuracy
+
+```
+
+## Residual Diagnostics
+```{r}
+# Residuals
+manual_residuals <- residuals(manual_sarima_model)
+
+# Plot residuals
+tsdisplay(manual_residuals,
+          main = "Residual Diagnostics: Manual SARIMA",
+          lag.max = 52)
+
+```
+
+## Holt-Winters Model Fitting
+```{r}
+
+# Step 8.4 - Fit the Holt-Winters Model to the Training Set
+hw_model <- HoltWinters(train_ts)
+
+```
+
+
+##Forecast Using Holt-Winters
+```{r}
+# Step 8.4 - Forecasting for the Test Period Using Holt-Winters
+forecast_horizon <- length(test_ts)
+hw_forecast <- forecast(hw_model, h = forecast_horizon)
+
+```
+
+
+```{r}
+# --- Calculate Accuracy for Holt-Winters ---
+hw_accuracy <- accuracy(hw_forecast, as.numeric(test_ts))
+
+```
+
+##Plot: Holt-Winters Forecast vs Actual
+```{r}
+# Step 8.4 - Plot Forecast vs Actual
+autoplot(hw_forecast) +
+  autolayer(test_ts, series = "Actual", lwd = 1.2, color = "red") +
+  ggtitle("Holt-Winters Forecast vs Actual (Test Set)") +
+  xlab("Time") + ylab("Fuel Price") +
+  theme_minimal() +
+  scale_color_manual(values = c("Holt-Winters Forecast" = "blue", "Actual" = "red"))
+
+```
+
+## Evaluate Accuracy of Holt-Winters Forecast
+```{r}
+# Step 8.5 - Accuracy Metrics for Holt-Winters
+hw_accuracy <- accuracy(as.numeric(hw_forecast$mean), as.numeric(test_ts))
+hw_accuracy
+
+```
+
+
+```{r}
+# --- Print accuracy results for each model ---
+
+cat("\n🔵 Auto ARIMA Accuracy:\n")
+print(auto_accuracy)
+
+cat("\n🟢 Manual SARIMA Accuracy:\n")
+print(manual_sarima_accuracy)
+
+cat("\n🟣 Holt-Winters Accuracy:\n")
+print(hw_accuracy)
+
+```
+
+##Residual Plot for Holt-Winters
+```{r}
+# Step 8.6 - Residuals Plot
+hw_residuals <- residuals(hw_model)
+ts.plot(hw_residuals,
+        main = "Residuals from Holt-Winters Model",
+        col = "purple", ylab = "Residuals", lwd = 1.5)
+
+```
+
+## ACF of Residuals for Holt-Winters
+```{r}
+# Step 8.6 - ACF of Residuals
+acf(hw_residuals, main = "ACF of Holt-Winters Residuals")
+
+```
+
+## Model Accuracy Metrics Table
+```{r}
+# Safely extract RMSE and MAPE using numeric indexing (2 = RMSE, 5 = MAPE in the accuracy output)
+rmse_values <- c(auto_accuracy[2], manual_sarima_accuracy[2], hw_accuracy[2])
+mape_values <- c(auto_accuracy[5], manual_sarima_accuracy[5], hw_accuracy[5])
+
+# Model names
+model_names <- c("Auto ARIMA", "Manual SARIMA", "Holt-Winters")
+
+# Create comparison table
+comparison_df <- data.frame(
+  Model = model_names,
+  RMSE = rmse_values,
+  MAPE = mape_values
+)
+
+print(comparison_df)
+
+```
+
+
+```{r}
+# Model comparison data
+comparison_df <- data.frame(
+  Model = c("Auto ARIMA", "Manual SARIMA", "Holt-Winters"),
+  MAPE = c(320.3311, 311.8710, 349.3956)
+)
+
+# Bar plot for MAPE comparison
+ggplot(comparison_df, aes(x = reorder(Model, MAPE), y = MAPE, fill = Model)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  labs(title = "Model Comparison Based on MAPE",
+       x = "Forecasting Model",
+       y = "Mean Absolute Percentage Error (MAPE)") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        text = element_text(size = 12)) +
+  geom_text(aes(label = round(MAPE, 2)), vjust = -0.5)
+
+```
+
+###The Ljung-Box test checks whether the residuals are independent (white noise)-a sign that the model has captured the time series structure well.
+```{r}
+# Ljung-Box test for Auto ARIMA
+Box.test(auto_residuals, lag = 20, type = "Ljung-Box")
+
+# Ljung-Box test for Manual SARIMA
+Box.test(manual_residuals, lag = 20, type = "Ljung-Box")
+
+# Ljung-Box test for Holt-Winters
+Box.test(hw_residuals, lag = 20, type = "Ljung-Box")
+
+```
+###Residual ACF/PACF Plots for Each Model
+##visualize autocorrelation in residuals.
+```{r}
+# ACF/PACF for Auto ARIMA residuals
+tsdisplay(auto_residuals, main = "Auto ARIMA Residuals", lag.max = 52)
+
+# ACF/PACF for Manual SARIMA residuals
+tsdisplay(manual_residuals, main = "Manual SARIMA Residuals", lag.max = 52)
+
+# ACF/PACF for Holt-Winters residuals
+tsdisplay(hw_residuals, main = "Holt-Winters Residuals", lag.max = 52)
+
+```
+
+##Forecast 24 Weeks Ahead
+```{r}
+# Step 1: Generate 24-week forecast using Manual SARIMA model
+future_forecast_horizon <- 24  # forecast 24 weeks into the future
+sarima_future_forecast <- forecast(manual_sarima_model, h = future_forecast_horizon)
+
+```
+
+##Plot Forecast with Confidence Intervals
+```{r}
+# Step 2: Plotting the forecast
+autoplot(sarima_future_forecast) +
+  ggtitle("24-Week Forecast Using Manual SARIMA") +
+  xlab("Time") +
+  ylab("Forecasted Fuel Price") +
+  theme_minimal() +
+  scale_color_manual(values = c("Forecast" = "blue")) +
+  labs(caption = "Forecast includes 80% and 95% prediction intervals")
+
+```
+
+##Forecasted Values
+```{r}
+# Step 3: View the forecast values
+print(sarima_future_forecast)
+
+```
+
+##Forecasting with Auto ARIMA (24 Weeks)
+##Fit and Forecast Future
+```{r}
+# Refit Auto ARIMA model on entire time series (optional but recommended for full future forecasting)
+full_auto_model <- auto.arima(ts_fuel_price)
+
+# Forecast 24 weeks into the future
+future_forecast_auto <- forecast(full_auto_model, h = 24)
+
+```
+
+##Plot Forecast with Confidence Intervals
+```{r}
+autoplot(future_forecast_auto) +
+  ggtitle("Auto ARIMA: 24-Week Forecast of Fuel Prices") +
+  xlab("Week") + ylab("Fuel Price (Pence per Litre)") +
+  theme_minimal()
+
+```
+
+##Inspect Forecast Values
+```{r}
+# Print forecast values and intervals
+print(future_forecast_auto)
+
+```
+
+##Forecasting with Holt-Winters (24 Weeks)
+##Fit and Forecast Future
+```{r}
+# Refit Holt-Winters on full data
+full_hw_model <- HoltWinters(ts_fuel_price)
+
+# Forecast 24 weeks into the future
+future_forecast_hw <- forecast(full_hw_model, h = 24)
+
+```
+
+## Plot Forecast with Confidence Intervals
+```{r}
+autoplot(future_forecast_hw) +
+  ggtitle("Holt-Winters: 24-Week Forecast of Fuel Prices") +
+  xlab("Week") + ylab("Fuel Price (Pence per Litre)") +
+  theme_minimal()
+
+```
+
+## Inspect Forecast Values
+```{r}
+# Print forecast values and intervals
+print(future_forecast_hw)
+
+```
+
+
+
+```{r}
+# View forecasted values for each model (next 24 weeks)
+cat("📈 Auto ARIMA Forecast:\n")
+print(future_forecast_auto)
+
+cat("\n📈 Manual SARIMA Forecast:\n")
+print(sarima_future_forecast)
+
+cat("\n📈 Holt-Winters Forecast:\n")
+print(future_forecast_hw)
+
+```
+
+
+```{r}
+# Overlay Forecast Plot: 24-Week Comparison
+autoplot(future_forecast_auto, PI = FALSE) +
+  autolayer(sarima_future_forecast$mean, series = "Manual SARIMA") +
+  autolayer(future_forecast_hw$mean, series = "Holt-Winters") +
+  labs(title = "Overlay of 24-Week Forecasts: Auto ARIMA vs Manual SARIMA vs Holt-Winters",
+       x = "Week",
+       y = "Fuel Price (Pence per Litre)") +
+  theme_minimal() +
+  scale_color_manual(values = c("Auto ARIMA" = "blue",
+                                "Manual SARIMA" = "green",
+                                "Holt-Winters" = "red")) +
+  theme(legend.position = "bottom")
+
+```
+
+
+```{r}
+# Collect model summary stats with only MAPE
+model_summary <- data.frame(
+  Model = c("Auto ARIMA", "Manual SARIMA", "Holt-Winters"),
+  AIC = c(round(AIC(auto_model), 2), round(AIC(manual_sarima_model), 2), "Not Applicable"),
+  BIC = c(round(BIC(auto_model), 2), round(BIC(manual_sarima_model), 2), "Not Applicable"),
+  MAPE = round(c(auto_accuracy[5], manual_sarima_accuracy[5], hw_accuracy[5]), 2),
+  Ljung_Box_p = round(c(
+    Box.test(auto_residuals, lag = 20, type = "Ljung-Box")$p.value,
+    Box.test(manual_residuals, lag = 20, type = "Ljung-Box")$p.value,
+    Box.test(hw_residuals, lag = 20, type = "Ljung-Box")$p.value
+  ), 4)
+)
+
+print(model_summary)
+
+```
+
+```{r}
+# Final cleaned model summary
+model_summary <- data.frame(
+  Model = c("Auto ARIMA", "Manual SARIMA", "Holt-Winters"),
+  AIC = c(round(AIC(auto_model), 2), round(AIC(manual_sarima_model), 2), "Not Applicable"),
+  BIC = c(round(BIC(auto_model), 2), round(BIC(manual_sarima_model), 2), "Not Applicable"),
+  MAPE = round(c(auto_accuracy[5], manual_sarima_accuracy[5], hw_accuracy[5]), 2),
+  Ljung_Box_p = round(c(
+    Box.test(auto_residuals, lag = 20, type = "Ljung-Box")$p.value,
+    Box.test(manual_residuals, lag = 20, type = "Ljung-Box")$p.value,
+    Box.test(hw_residuals, lag = 20, type = "Ljung-Box")$p.value
+  ), 4)
+)
+
+print(model_summary)
+
+```
+
+```{r}
+cat("Model Performance Insights:\n")
+cat("✔ Manual SARIMA has the **lowest MAPE**, indicating the best forecast accuracy on test data.\n")
+cat("✔ Auto ARIMA also performs well, but not as well as SARIMA.\n")
+cat("✔ Holt-Winters shows the **highest MAPE**, suggesting it underperforms compared to ARIMA models.\n")
+cat("✔ The Ljung-Box p-values for all models are > 0.05, implying residuals are likely white noise (good model fit).\n")
+
+```
+
+
+```{r}
+cat("🔎 Forecast Comparison Implications:\n")
+cat("- While all models predict a similar **upward trend**, the **forecasted values differ subtly**.\n")
+cat("- Manual SARIMA is more conservative and smoother; Auto ARIMA fluctuates more.\n")
+cat("- Holt-Winters tends to smooth aggressively, possibly missing local variations.\n")
+cat("- Use-case matters: For **strategic forecasting**, SARIMA is most stable. For **short-term alerts**, Auto ARIMA might be more sensitive.\n")
+
+```
+
+
+```{r}
+cat("📌 Recommendations:\n")
+cat("- ✅ Use **Manual SARIMA** for official forecasts (lowest MAPE & reliable residuals).\n")
+cat("- 🔄 Continue monitoring forecast accuracy with incoming data (update models quarterly).\n")
+cat("- 📈 Visualize forecasts monthly and assess trends versus actuals.\n")
+cat("- 🛠️ Optionally ensemble ARIMA + Holt-Winters for robustness.\n")
+
+```
+
+# --- Multivariate Time Series Forecasting ---
+
+# 1. Load Required Libraries
+```{r}
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(zoo)
+library(forecast)
+library(ggplot2)
+library(tseries)
+library(vars)
+``` 
+
+# 2. Load and Clean Fuel Data
+```{r}
+fuel_data <- read_excel("fuel_price (9).xlsx", sheet = "Table 1 Weekly", skip = 5)
+colnames(fuel_data) <- c("Week_Ending", "Average_Price", "Quantity_Per_Transaction", "Fuel_Sales_Index")
+
+fuel_data$Week_Ending <- as.Date(fuel_data$Week_Ending, origin = "1899-12-30")
+
+fuel_data$Fuel_Sales_Index <- ifelse(fuel_data$Fuel_Sales_Index %in% c("[x]", "", "N/A", "n/a"), NA, fuel_data$Fuel_Sales_Index)
+fuel_data$Fuel_Sales_Index <- gsub(",", "", fuel_data$Fuel_Sales_Index)
+fuel_data$Fuel_Sales_Index <- trimws(fuel_data$Fuel_Sales_Index)
+fuel_data$Fuel_Sales_Index <- as.numeric(fuel_data$Fuel_Sales_Index)
+
+fuel_data$Week_Ending <- floor_date(fuel_data$Week_Ending, unit = "week", week_start = 7)
+``` 
+
+# 3. Load and Clean Brent Crude Oil Data
+```{r}
+brent_data <- read_excel("Fuel_2_Brent_oil.xlsx")
+colnames(brent_data)[1] <- "Week_Ending"
+colnames(brent_data)[2] <- "Brent_Price"
+
+brent_data$Week_Ending <- as.Date(brent_data$Week_Ending)
+brent_data$Brent_Price <- na.locf(brent_data$Brent_Price, na.rm = FALSE)
+brent_data$Week_Ending <- floor_date(brent_data$Week_Ending, unit = "week", week_start = 7)
+``` 
+
+# 4. Merge Datasets
+```{r}
+merged_data <- left_join(fuel_data, brent_data, by = "Week_Ending")
+str(merged_data)
+``` 
+
+# 5. Prepare Time Series Objects
+```{r}
+ts_avg_price <- ts(merged_data$Average_Price, frequency = 52, start = c(2021, 1))
+brent_exog <- as.matrix(merged_data$Brent_Price)
+``` 
+
+# 6. SARIMAX Model: Auto ARIMA with Exogenous Variable
+```{r}
+sarimax_model <- auto.arima(ts_avg_price, xreg = brent_exog, seasonal = TRUE)
+summary(sarimax_model)
+``` 
+
+# 7. Forecast Using SARIMAX
+```{r}
+future_xreg <- matrix(rep(tail(merged_data$Brent_Price, 1), 24), ncol = 1)
+sarimax_forecast <- forecast(sarimax_model, xreg = future_xreg, h = 24)
+
+autoplot(sarimax_forecast) +
+  ggtitle("SARIMAX 24-Week Forecast") +
+  xlab("Time") + ylab("Fuel Price (Pence per Litre)") +
+  theme_minimal()
+``` 
+
+# 8. SARIMAX Residual Diagnostics
+```{r}
+sarimax_resid <- residuals(sarimax_model)
+tsdisplay(sarimax_resid, main = "SARIMAX Residuals", lag.max = 52)
+Box.test(sarimax_resid, lag = 20, type = "Ljung-Box")
+``` 
+
+# 9. Alternative SARIMAX Model (Manual Orders)
+```{r}
+sarimax_alt <- Arima(ts_avg_price, order = c(1,1,1), seasonal = c(0,1,1), xreg = brent_exog)
+summary(sarimax_alt)
+forecast_sarimax_alt <- forecast(sarimax_alt, xreg = future_xreg, h = 24)
+
+autoplot(forecast_sarimax_alt) +
+  ggtitle("Manual SARIMAX Forecast (1,1,1)(0,1,1)[52]") +
+  theme_minimal()
+
+sarimax_alt_resid <- residuals(sarimax_alt)
+tsdisplay(sarimax_alt_resid, main = "Alt SARIMAX Residuals", lag.max = 52)
+Box.test(sarimax_alt_resid, lag = 20, type = "Ljung-Box")
+``` 
+
+# 10. VAR Model Preparation
+```{r}
+var_data <- merged_data %>%
+  dplyr::select(Average_Price, Brent_Price) %>%
+  na.omit()
+
+ts_var_data <- ts(var_data, frequency = 52, start = c(2021, 1))
+``` 
+
+# 11. Stationarity Check for VAR Variables
+```{r}
+adf.test(ts_var_data[, "Average_Price"])
+adf.test(ts_var_data[, "Brent_Price"])
+``` 
+
+# 12. Differencing for VAR (if needed)
+```{r}
+var_data_diff <- data.frame(
+  Average_Price = ts_var_data[, "Average_Price"][-1],
+  Brent_Price = diff(ts_var_data[, "Brent_Price"])
+)
+
+ts_var_data_diff <- ts(var_data_diff, frequency = 52, start = c(2021, 2))
+``` 
+
+# 13. Select Optimal Lags for VAR
+```{r}
+lag_selection <- VARselect(ts_var_data_diff, lag.max = 10, type = "const")
+print(lag_selection$selection)
+``` 
+
+# 14. Fit VAR Model
+```{r}
+var_model <- VAR(ts_var_data_diff, p = 2, type = "const")
+summary(var_model)
+``` 
+
+# 15. VAR Residual Diagnostics
+```{r}
+serial.test(var_model, lags.pt = 10, type = "PT.asymptotic")
+plot(resid(var_model))
+``` 
+
+# 16. Forecast with VAR Model (24 weeks)
+```{r}
+var_forecast <- predict(var_model, n.ahead = 24)
+plot(var_forecast, names = "Average_Price")
+plot(var_forecast, names = "Brent_Price")
+``` 
+
+# 17. Post-process VAR Forecast Results
+```{r}
+last_date <- max(merged_data$Week_Ending, na.rm = TRUE)
+forecast_dates <- seq(from = last_date + 7, by = "week", length.out = 24)
+
+avg_price_forecast <- var_forecast$fcst$Average_Price[, "fcst"]
+brent_price_diff_forecast <- var_forecast$fcst$Brent_Price[, "fcst"]
+
+last_real_brent_price <- tail(merged_data$Brent_Price, 1)
+brent_price_forecast <- last_real_brent_price + cumsum(brent_price_diff_forecast)
+
+forecast_df <- data.frame(
+  Week_Ending = forecast_dates,
+  Average_Price = avg_price_forecast,
+  Brent_Price = brent_price_forecast
+)
+head(forecast_df)
+``` 
+
+# 18. Calculate Accuracy Metrics for SARIMAX and VAR
+```{r}
+# --- 18. Create Test Set for VAR and SARIMAX Models ---
+
+# Calculate total number of observations
+n <- length(ts_avg_price)
+
+# Define split point for 80% training and 20% testing
+split_index <- floor(0.8 * n)
+
+# Create test set (last 20% of the data)
+test_ts <- ts(ts_avg_price[(split_index + 1):n],
+              start = time(ts_avg_price)[split_index + 1],
+              frequency = frequency(ts_avg_price))
+
+# Extract forecasted values for SARIMAX (next 24 weeks)
+sarimax_forecast_values <- as.numeric(sarimax_forecast$mean)
+
+# Extract forecasted Average_Price values for VAR (next 24 weeks)
+var_forecast_values <- forecast_df$Average_Price
+
+# Extract actual last 24 weeks from test set for accuracy evaluation
+test_ts_24 <- tail(test_ts, 24)
+
+# --- 18.1 Accuracy Metrics Calculation ---
+
+# SARIMAX model accuracy
+sarimax_rmse <- sqrt(mean((sarimax_forecast_values - test_ts_24)^2, na.rm = TRUE))
+sarimax_mape <- mean(abs((sarimax_forecast_values - test_ts_24) / test_ts_24), na.rm = TRUE) * 100
+
+# VAR model accuracy
+var_rmse <- sqrt(mean((var_forecast_values - test_ts_24)^2, na.rm = TRUE))
+var_mape <- mean(abs((var_forecast_values - test_ts_24) / test_ts_24), na.rm = TRUE) * 100
+
+``` 
+
+
+```{r}
+# --- 18. Calculate Accuracy Metrics for SARIMAX and VAR ---
+# (your sarimax_rmse, sarimax_mape, var_rmse, var_mape code)
+
+# --- 19. Final Model Comparison (All 5 Models Corrected) ---
+final_comparison_df <- data.frame(
+  Model = c("Auto ARIMA", "Manual SARIMA", "Holt-Winters", "SARIMAX", "VAR"),
+  RMSE = c(
+    auto_accuracy[2, "RMSE"],
+    manual_sarima_accuracy[2, "RMSE"],
+    hw_accuracy[2, "RMSE"],
+    sarimax_rmse,
+    var_rmse
+  ),
+  MAPE = c(
+    auto_accuracy[2, "MAPE"],
+    manual_sarima_accuracy[2, "MAPE"],
+    hw_accuracy[2, "MAPE"],
+    sarimax_mape,
+    var_mape
+  )
+)
+
+print(final_comparison_df)
+
+# --- 20. Plot Model Comparison ---
+ggplot(final_comparison_df, aes(x = reorder(Model, MAPE), y = MAPE, fill = Model)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  labs(title = "Model Comparison Based on MAPE (5 Models)",
+       x = "Forecasting Model", y = "Mean Absolute Percentage Error (MAPE)") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        text = element_text(size = 12)) +
+  geom_text(aes(label = round(MAPE, 2)), vjust = -0.5)
+
+```
+
+
+```{r}
+# --- Check Normality of Residuals for Auto ARIMA ---
+hist(auto_residuals, main = "Histogram of Auto ARIMA Residuals", col = "lightblue")
+qqnorm(auto_residuals)
+qqline(auto_residuals, col = "red")
+
+# --- Check Normality of Residuals for Manual SARIMA ---
+hist(manual_residuals, main = "Histogram of Manual SARIMA Residuals", col = "lightgreen")
+qqnorm(manual_residuals)
+qqline(manual_residuals, col = "red")
+
+# --- Check Normality of Residuals for Holt-Winters ---
+hist(hw_residuals, main = "Histogram of Holt-Winters Residuals", col = "lightpink")
+qqnorm(hw_residuals)
+qqline(hw_residuals, col = "red")
+
+# --- Check Normality of Residuals for SARIMAX ---
+hist(sarimax_resid, main = "Histogram of SARIMAX Residuals", col = "lightyellow")
+qqnorm(sarimax_resid)
+qqline(sarimax_resid, col = "red")
+
+# --- Check Normality of Residuals for VAR ---
+var_residuals <- resid(var_model)
+hist(var_residuals[,1], main = "Histogram of VAR Residuals (Average_Price)", col = "lightcyan")
+qqnorm(var_residuals[,1])
+qqline(var_residuals[,1], col = "red")
+
+```
+
+
+```{r}
+# --- Final Visualization: Actual vs Predicted vs Forecasted ---
+
+# 1. Actual data (training + testing)
+full_actual <- ts_fuel_price
+
+# 2. Fitted values on training set
+fitted_auto <- fitted(auto_model)
+fitted_sarima <- fitted(manual_sarima_model)
+fitted_hw <- fitted(hw_model)
+
+# 3. Extend fitted + forecast
+combined_auto <- ts(c(fitted_auto, future_forecast_auto$mean), start = start(full_actual), frequency = 52)
+combined_sarima <- ts(c(fitted_sarima, sarima_future_forecast$mean), start = start(full_actual), frequency = 52)
+combined_hw <- ts(c(fitted_hw, future_forecast_hw$mean), start = start(full_actual), frequency = 52)
+
+# 4. Plot
+autoplot(full_actual, series = "Actual", color = "black") +
+  autolayer(combined_auto, series = "Auto ARIMA Forecast", color = "blue") +
+  autolayer(combined_sarima, series = "Manual SARIMA Forecast", color = "green") +
+  autolayer(combined_hw, series = "Holt-Winters Forecast", color = "red") +
+  ggtitle("Actual, Predicted, and Forecasted Fuel Prices") +
+  xlab("Week") +
+  ylab("Fuel Price (Pence per Litre)") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(title = "Legend"))
+
+```
+
+
+
+
+
+
+

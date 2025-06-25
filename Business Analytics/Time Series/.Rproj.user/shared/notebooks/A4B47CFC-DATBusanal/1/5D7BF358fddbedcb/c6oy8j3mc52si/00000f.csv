@@ -1,0 +1,6 @@
+"0","# Plot Brent crude price time series to inspect trends"
+"0","ggplot(brent_data, aes(x = Date, y = Brent_Price)) +"
+"0","  geom_line(color = ""#2C3E50"") +"
+"0","  labs(title = ""Weekly Europe Brent Crude Spot Price (FOB)"","
+"0","       x = ""Date"", y = ""Price (USD per Barrel)"") +"
+"0","  theme_minimal()"

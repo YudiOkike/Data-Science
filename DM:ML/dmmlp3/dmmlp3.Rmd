@@ -1,0 +1,433 @@
+---
+title: "portfolio 3"
+author: "Udochukwu Okike 2423983"
+date: "2025-04-16"
+output: html_document
+---
+
+# Section I: Data Understanding (CRISP-DM Step 2)
+
+# 1.0 Library and Package Installation
+
+```{r Install and Load Packages}
+# Define required packages for data analysis, visualization, and modeling
+packages <- c("tidyverse", "janitor", "DataExplorer", "GGally", "caret", "reshape2", "randomForest", "rpart", "e1071", "keras", "car")
+# Install missing packages with dependencies
+install.packages(setdiff(packages, installed.packages()[, "Package"]), dependencies = TRUE)
+
+# Load packages for data manipulation, visualization, and machine learning
+library(tidyverse)      # Data manipulation and visualization
+library(janitor)        # Data cleaning utilities
+library(DataExplorer)   # Automated exploratory data analysis
+library(GGally)         # Enhanced visualizations for correlations
+library(caret)          # Machine learning utilities
+library(rpart)          # Decision tree modeling
+library(reshape2)       # Data reshaping for visualizations
+library(randomForest)   # Random forest modeling
+library(e1071)          # Support vector machines
+library(car)            # Variance inflation factor analysis
+library(keras)          # Deep learning framework
+```
+
+# 2.0 Load and Clean Dataset
+
+```{r Load Dataset}
+# Load housing dataset and clean column names to a consistent format
+housing <- read_csv("Housing Data_Same Region.csv") %>%
+  clean_names()
+```
+
+# 3.0 Dataset Structure and Summary
+
+```{r Structure and Summary}
+# Display dataset structure (variable types and sample values)
+str(housing)
+# Summarize dataset with basic statistics (min, max, mean, etc.)
+summary(housing)
+# Provide a concise overview of dataset columns and sample data
+glimpse(housing)
+```
+
+# 4.0 Duplicate Check
+
+```{r Duplicate Check}
+# Identify duplicate parcel numbers (rows with same parcelno)
+duplicated_parcels <- housing %>%
+  group_by(parcelno) %>%
+  filter(n() > 1)
+
+# Return number of unique parcels and count of duplicate rows
+list(
+  Unique_Parcels = n_distinct(housing$parcelno),
+  Duplicate_Rows = nrow(duplicated_parcels)
+)
+```
+
+# 5.0 Missing Value Check
+
+```{r Missing Values}
+# Count missing values per column and keep only columns with missing data
+sapply(housing, \(x) sum(is.na(x))) %>%
+  keep(~ . > 0)
+```
+
+# 6.0 Outlier Detection via Boxplots
+
+```{r Outlier Boxplots, fig.height=8}
+# Create boxplots for numeric columns to visualize potential outliers
+housing %>%
+  select(where(is.numeric)) %>%
+  pivot_longer(cols = everything()) %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_boxplot() +
+  coord_flip() +  # Flip axes for better readability
+  theme_minimal() +
+  labs(title = "Outlier Detection by Boxplots", x = "Feature", y = "Value")
+```
+
+# 7.0 Correlation Analysis
+
+```{r Correlation Heatmap, fig.height=8, fig.width=10}
+# Calculate correlation matrix for numeric columns and reshape for plotting
+corr_matrix <- housing %>%
+  select(where(is.numeric)) %>%
+  cor() %>%
+  melt()
+
+# Plot heatmap of correlations with color gradient
+ggplot(corr_matrix, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1, 1)) +
+  coord_fixed() +  # Ensure square tiles
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels
+  labs(title = "Correlation Heatmap")
+```
+
+# Section II: Data Preparation (CRISP-DM)
+
+# 8.0 Feature Engineering
+
+```{r Feature Engineering}
+# Define mandatory features required for final prediction
+portfolio_required_inputs <- c(
+  "lnd_sqfoot", "tot_lvg_area", "spec_feat_val", "rail_dist", "ocean_dist",
+  "water_dist", "cntr_dist", "subcntr_di", "hwy_dist", "age",
+  "avno60plus", "structure_quality", "month_sold"
+)
+
+# Step 1: Drop irrelevant features (parcelno, latitude, longitude)
+housing_selected <- housing %>%
+  select(-parcelno, -latitude, -longitude)
+
+# Step 2: Remove highly correlated features (correlation > 0.9), preserving required inputs
+num_feats <- housing_selected %>% select(where(is.numeric), -sale_prc)
+corr_drop <- findCorrelation(cor(num_feats), cutoff = 0.9, names = TRUE)
+corr_drop <- setdiff(corr_drop, portfolio_required_inputs)
+housing_selected <- housing_selected %>% select(-all_of(corr_drop))
+
+# Step 3: Use Random Forest to identify and remove least important features
+set.seed(123)  # Ensure reproducibility
+rf_model <- randomForest(sale_prc ~ ., data = housing_selected, importance = TRUE)
+low_importance <- importance(rf_model) %>%
+  as.data.frame() %>%
+  rownames_to_column("Feature") %>%
+  arrange(IncNodePurity) %>%
+  tail(5) %>%  # Select 5 least important features
+  pull(Feature)
+low_importance <- setdiff(low_importance, portfolio_required_inputs)
+housing_selected <- housing_selected %>% select(-all_of(low_importance))
+
+# Step 4: Remove features with high Variance Inflation Factor (VIF > 5)
+vif_model <- lm(sale_prc ~ ., data = housing_selected)
+vif_scores <- vif(vif_model)
+high_vif <- names(vif_scores[vif_scores > 5])
+high_vif <- setdiff(high_vif, portfolio_required_inputs)
+housing_selected <- housing_selected %>% select(-all_of(high_vif))
+
+# Display final selected features
+names(housing_selected)
+# Reorder columns to place target (sale_prc) at the end for clarity
+housing_engineered <- housing_selected %>%
+  relocate(sale_prc, .after = last_col())
+```
+
+# 9.0 Normalisation
+
+```{r Scaling}
+# Select numeric features excluding the target variable
+numeric_feats <- housing_engineered %>%
+  select(where(is.numeric), -sale_prc)
+
+# Calculate min and max for each numeric column
+min_vals <- apply(numeric_feats, 2, min)
+max_vals <- apply(numeric_feats, 2, max)
+
+# Define function to apply min-max scaling
+scale_data <- function(df, min_vals, max_vals) {
+  map2_dfc(df, names(df), ~ (.x - min_vals[.y]) / (max_vals[.y] - min_vals[.y])) %>%
+    setNames(names(df))
+}
+
+# Apply min-max scaling to numeric features
+scaled_feats <- scale_data(numeric_feats, min_vals, max_vals)
+
+# Combine scaled features with target variable
+housing_scaled <- bind_cols(scaled_feats, sale_prc = housing_engineered$sale_prc)
+
+# Verify scaled values are between 0 and 1
+summary(housing_scaled)
+
+```
+
+# 10.0 Train/Test Split
+
+```{r Data Split}
+# Set seed for reproducibility
+set.seed(123)
+# Split data into 80% training and 20% testing sets
+train_index <- createDataPartition(housing_scaled$sale_prc, p = 0.8, list = FALSE)
+train_set <- housing_scaled[train_index, ]
+test_set <- housing_scaled[-train_index, ]
+
+# Display sizes of training and testing sets
+list(train_size = nrow(train_set), test_size = nrow(test_set))
+```
+
+# Section III: Modelling (CRISP-DM)
+
+# 11.0 Basic Linear Regression
+
+```{r Linear Regression}
+# Train linear regression model on training set
+lm_model <- lm(sale_prc ~ ., data = train_set)
+# Predict on test set
+lm_preds <- predict(lm_model, newdata = test_set)
+
+# Calculate Mean Squared Error (MSE)
+EMlm <- c(MSE  = mean((lm_preds - test_set$sale_prc)^2))
+EMlm
+```
+
+# 12.0 Random Forest Variants
+
+```{r Random Forest Variants}
+# Initialize list to store results
+rf_results <- list()
+# Test Random Forest with different numbers of trees
+for (ntree in c(100, 300, 500, 700)) {
+  model <- randomForest(sale_prc ~ ., data = train_set, ntree = ntree)
+  preds <- predict(model, newdata = test_set)
+  mse <- mean((preds - test_set$sale_prc)^2)
+  rf_results[[paste0("RF_", ntree, "_MSE")]] <- mse
+}
+# Display MSE for each Random Forest variant
+EMrf <- unlist(rf_results)
+EMrf
+```
+
+# 13.0 Support Vector Regression (SVR)
+
+```{r SVR Models}
+# Initialize list to store SVR results
+svr_results <- list()
+# Test SVR with different kernels
+kernels <- c("linear", "polynomial", "radial")
+for (kernel in kernels) {
+  model <- svm(sale_prc ~ ., data = train_set, kernel = kernel)
+  preds <- predict(model, newdata = test_set)
+  mse <- mean((preds - test_set$sale_prc)^2)
+  svr_results[[paste0("SVR_", kernel, "_MSE")]] <- mse
+}
+# Display MSE for each SVR model
+EMsvr <- unlist(svr_results)
+EMsvr
+```
+
+# 14.0 Generalised Linear Model (GLM)
+
+```{r GLM Model}
+# Train GLM with Gaussian family
+glm_model <- glm(sale_prc ~ ., data = train_set, family = gaussian())
+# Predict on test set
+glm_preds <- predict(glm_model, newdata = test_set)
+
+# Calculate MSE
+EMglm <- c(MSE  = mean((glm_preds - test_set$sale_prc)^2))
+EMglm
+```
+
+# 15.0 Decision Tree
+
+```{r Decision Tree}
+# Train decision tree model for regression
+dt_model <- rpart(sale_prc ~ ., data = train_set, method = "anova")
+# Predict on test set
+dt_preds <- predict(dt_model, newdata = test_set)
+# Calculate MSE
+dt_mse <- mean((dt_preds - test_set$sale_prc)^2)
+dt_mse
+```
+
+# 16.0 LSTM and TCN (Deep Learning with keras/tensorflow)
+
+```{r Preprocess Data for Deep Learning, eval=FALSE}
+# Prepare data for deep learning models
+deeplearning_data <- housing_scaled
+deeplearning_matrix <- as.matrix(deeplearning_data)
+
+# Split data into training and testing sets
+dl_train <- deeplearning_matrix[train_index, ]
+dl_test  <- deeplearning_matrix[-train_index, ]
+dim_x <- ncol(dl_train) - 1
+# Reshape data for LSTM/TCN input
+x_train <- array(dl_train[, 1:dim_x], dim = c(nrow(dl_train), 1, dim_x))
+y_train <- dl_train[, dim_x + 1]
+x_test  <- array(dl_test[, 1:dim_x], dim = c(nrow(dl_test), 1, dim_x))
+y_test  <- dl_test[, dim_x + 1]
+```
+
+```{r Build and Train LSTM Model, eval=FALSE}
+# Define LSTM model architecture
+model_lstm <- keras_model_sequential() %>%
+  layer_lstm(units = 64, input_shape = c(1, dim_x)) %>%
+  layer_dense(units = 1)
+
+# Compile and train LSTM model
+model_lstm %>% compile(loss = "mse", optimizer = "adam", metrics = "mae")
+model_lstm %>% fit(x_train, y_train, epochs = 50, batch_size = 32, validation_split = 0.2)
+
+# Predict and calculate MSE
+lstm_preds <- model_lstm %>% predict(x_test)
+lstm_mse <- mean((lstm_preds - y_test)^2)
+lstm_mse
+```
+
+```{r Build and Train TCN Model, eval=FALSE}
+# Define TCN model architecture
+model_tcn <- keras_model_sequential() %>%
+  layer_conv_1d(filters = 64, kernel_size = 2, activation = "relu", input_shape = c(1, dim_x), padding = "causal") %>%
+  layer_global_average_pooling_1d() %>%
+  layer_dense(units = 1)
+
+# Compile and train TCN model
+model_tcn %>% compile(loss = "mse", optimizer = "adam", metrics = "mae")
+model_tcn %>% fit(x_train, y_train, epochs = 50, batch_size = 32, validation_split = 0.2)
+
+# Predict and calculate MSE
+tcn_preds <- model_tcn %>% predict(x_test)
+tcn_mse <- mean((tcn_preds - y_test)^2)
+tcn_mse
+```
+
+# 17.0 Model Selection
+
+```{r model comparison with mse}
+# Compile MSE results for all models
+model_mse <- data.frame(
+  Model = c("Linear Regression", "GLM", "Decision Tree",
+            "RF (101 trees)", "RF (202 trees)", "RF (505 trees)",
+            "SVR (Linear)", "SVR (Polynomial)", "SVR (Radial)",
+            "LSTM", "TCN"),
+  MSE = c(EMlm["MSE"], EMglm["MSE"], dt_mse,
+          EMrf[1], EMrf[2], EMrf[3],
+          EMsvr[1], EMsvr[2], EMsvr[3],
+          lstm_mse, tcn_mse),
+  Category = c("Statistical", "Statistical", "Tree-Based",
+               "Tree-Based", "Tree-Based", "Tree-Based",
+               "Kernel-Based", "Kernel-Based", "Kernel-Based",
+               "Deep Learning", "Deep Learning")
+)
+
+# Convert Category to factor for visualization
+model_mse$Category <- factor(model_mse$Category,
+                             levels = c("Statistical", "Tree-Based", "Kernel-Based", "Deep Learning"))
+
+# Plot bar chart comparing model MSEs
+ggplot(model_mse, aes(x = reorder(Model, MSE), y = MSE, fill = Category)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c(
+    "Statistical" = "lightgrey",
+    "Tree-Based" = "lightblue",
+    "Kernel-Based" = "lightgreen",
+    "Deep Learning" = "lightpink"
+  )) +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Model Comparison by MSE",
+       x = "Model",
+       y = "Mean Squared Error (MSE)",
+       fill = "Model Type")
+```
+
+
+
+# 19.0 Final Tuned Random Forest Model
+
+```{r Final Model Implemetation}
+# Set seed for reproducibility
+set.seed(123)
+
+# Train final Random Forest model with tuned hyperparameters
+final_rf_model <- randomForest(
+  sale_prc ~ ., 
+  data = train_set, 
+  ntree = 511, 
+  mtry = 3,
+  importance = TRUE
+)
+
+# Predict on test set
+final_rf_preds <- predict(final_rf_model, newdata = test_set)
+
+# Calculate MSE for final model
+final_rf_metrics <- c(MSE  = mean((final_rf_preds - test_set$sale_prc)^2))
+
+# Display performance metrics
+final_rf_metrics
+```
+
+# 20.0 Implementing Final Tuned RF Model
+
+```{r Prediction with given features}
+# Step 1: Define input data for prediction (raw values)
+portfolio_input_raw <- tibble(
+  lnd_sqfoot = 11247,
+  tot_lvg_area = 4552,
+  spec_feat_val = 2105,
+  rail_dist = 4871.9,
+  ocean_dist = 18507.2,
+  water_dist = 375.8,
+  cntr_dist = 43897.9,
+  subcntr_di = 40115.7,
+  hwy_dist = 41917.1,
+  age = 42,
+  avno60plus = 0,
+  structure_quality = 5,
+  month_sold = 8
+)
+
+# Step 2: Apply min-max scaling using training set min/max values
+portfolio_scaled <- map2_dfc(
+  names(portfolio_input_raw),
+  names(portfolio_input_raw),
+  ~ (portfolio_input_raw[[.x]] - min_vals[.y]) / (max_vals[.y] - min_vals[.y])
+)
+names(portfolio_scaled) <- names(portfolio_input_raw)
+
+# Step 3: Predict sale price using tuned Random Forest model
+portfolio_prediction <- paste0("Sale Price = ", predict(final_rf_model, newdata = portfolio_scaled))
+
+# Display predicted sale price
+portfolio_prediction
+
+# Function to calculate accuracy percentage from predictions
+rf_accuracy <- function(preds, actual) {
+  mape <- mean(abs(preds - actual) / actual) * 100
+  accuracy <- 100 - mape
+  return(round(accuracy, 2))  # rounded for clarity
+}
+
+final_rf_accuracy <- paste0("Accuracy Percentage = ",rf_accuracy(final_rf_preds, test_set$sale_prc))
+final_rf_accuracy  # Output accuracy as percentage
+```

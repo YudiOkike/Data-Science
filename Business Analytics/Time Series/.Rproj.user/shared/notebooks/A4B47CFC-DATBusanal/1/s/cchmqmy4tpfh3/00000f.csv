@@ -1,0 +1,8 @@
+"0","# Apply winsorisation to cap outliers at IQR bounds"
+"0","fuel_data$winsorised <- fuel_data$avg_price"
+"0","fuel_data$winsorised[outlier_idx] <- ifelse("
+"0","  fuel_data$winsorised[outlier_idx] > upper_bound, upper_bound, lower_bound"
+"0",")"
+"0",""
+"0","# Display original and winsorised values for outlier rows"
+"0","fuel_data[outlier_idx, c(""Date"", ""avg_price"", ""winsorised"")]"

@@ -1,0 +1,80 @@
+packages <- c("tidyverse", "rvest", "stringr", "httr", "xml2", "skimr", "janitor", "outliers", "zoo", "dplyr", "mice", "DescTools")
+install.packages(setdiff(packages, installed.packages()[,"Package"]), dependencies = TRUE)
+
+library(tidyverse)
+library(rvest)
+library(stringr)
+library(httr)
+library(xml2)
+library(skimr)
+library(janitor)
+library(zoo)
+library(dplyr)
+library(mice)
+library(tidyr)
+library(outliers)
+library(DescTools)
+
+rm(day)
+
+data("airquality")
+head(airquality)
+colSums(is.na(airquality))
+
+airqualityNAprime <- na.omit(airquality)
+view(airqualityNAprime)
+dim(airqualityNAprime)
+
+imp <- mice(airquality)
+cleanairquality <- complete(imp)
+View(cleanairquality)
+dim(cleanairquality)
+
+colSums(is.na(cleanairquality))
+colSums(is.na(airqualityNAprime))
+
+day <- read.csv("~/Downloads/day.csv")
+View(day)
+
+colSums(is.na(day))
+boxplot(day[, c("temp", "atemp", "hum", "windspeed")])
+
+for (col in c("temp", "atemp", "hum", "windspeed")) {
+  outlier_values <- boxplot.stats(day[[col]])$out
+  day[[col]][day[[col]] %in% outlier_values] <- NA
+}
+
+boxplot(day[, c("temp", "atemp", "hum", "windspeed")])
+
+colSums(is.na(day))
+
+day = drop_na(day)
+as.data.frame(colSums(is.na(day)))
+colSums(is.na(day))
+
+#Z_score
+data("mtcars")
+data <- mtcars$mpg
+z_scores <- scale(data)
+threshold <- 2
+outliers <- data[abs(z_scores) > threshold]
+print(outliers)
+
+#IQR
+IQR_value <- IQR(data)
+Q1 <- quantile(data, 0.25)    
+Q3 <- quantile(data, 0.75) 
+lower_bound <- Q1 - 1.5 * IQR_value
+upper_bound <- Q3 + 1.5 * IQR_value
+outlierss <- data[data < lower_bound | upper_bound]
+print(outlierss)
+
+#Tukey
+outliersss <- boxplot.stats(data)$out
+print(outliersss)
+
+#Grubb
+grubbs_result <- grubbs.test(data, type = 10, opposite = FALSE)
+print(grubbs_result)
+
+#winsorization

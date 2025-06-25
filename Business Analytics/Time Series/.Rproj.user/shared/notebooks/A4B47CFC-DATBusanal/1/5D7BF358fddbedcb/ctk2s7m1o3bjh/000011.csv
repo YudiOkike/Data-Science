@@ -1,0 +1,8 @@
+"0",""
+"0","# Identify the row index of missing values in avg_price column"
+"0","print(paste(""There is a missing value in row: "", which(is.na(fuel_data$avg_price))))"
+"1","[1]"
+"1"," ""There is a missing value in row:  91"" "
+"1"," ""There is a missing value in row:  115"""
+"1","
+"

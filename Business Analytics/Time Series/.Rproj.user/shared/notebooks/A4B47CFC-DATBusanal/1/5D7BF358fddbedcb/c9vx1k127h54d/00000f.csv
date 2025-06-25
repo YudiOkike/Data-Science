@@ -1,0 +1,17 @@
+"0","# Provide insights on the hybrid model's performance"
+"0","cat(""\n Hybrid Model Insight:\n"","
+"0","    ""- This hybrid combines SVR (strong short-term accuracy) and LSTM (temporal memory of patterns).\n"","
+"0","    ""- Ensemble smooths volatility and improves generalisation.\n"","
+"0","    ""- Useful in dynamic markets where sequential dependencies and margin-based trends coexist.\n"")"
+"1","
+ Hybrid Model Insight:
+"
+"1"," "
+"1","- This hybrid combines SVR (strong short-term accuracy) and LSTM (temporal memory of patterns).
+"
+"1"," "
+"1","- Ensemble smooths volatility and improves generalisation.
+"
+"1"," "
+"1","- Useful in dynamic markets where sequential dependencies and margin-based trends coexist.
+"

@@ -1,0 +1,135 @@
+"Car_Brand","Car_Model","Year","Car_Type","Price_in_GBP","Mileage_in_miles","Transmission","Fuel","Engine_Size_in_cc"
+"Vauxhall","Combo Life",2020,"Mpv",13124,30501,"Automatic","Diesel",1500
+"Peugeot","308",2021,"Hatchback",10669,42863,"Manual","Petrol",1200
+"Kia","Sportage",2023,"Estate",27480,15858,"Automatic","Hybrid",1600
+"Audi","A5 Sportback 35 TDI Sport S Tronic",2022,"Sportback",22690,52630,"Automatic","Diesel",2000
+"Nissan","Leaf N-Connecta Electric Hatchback",2023,"Hatchback",10431,57299,"Automatic","Electric",0
+"Kia","Picanto",2020,"Hatchback",8367,18970,"Manual","Petrol",1000
+"VW","T-Cross -",2020,"Estate",18362,19345,"Automatic","Petrol",1500
+"Land Rover","Range Rover Velar",2023,"Estate",38502,11866,"Automatic","Diesel",2000
+"VW","Tiguan",2022,"Estate",20162,20676,"Manual","Petrol",1500
+"VW","Tiguan",2020,"Estate",18697,41437,"Automatic","Diesel",2000
+"Land Rover","Range Rover evoque",2023,"Suv",29544,17289,"Automatic","Hybrid",1500
+"Toyota","Corolla",2022,"Hatchback",17465,17661,"Automatic","Hybrid",1800
+"Mini","Cooper Clubman",2020,"Estate",14582,22867,"Manual","Petrol",1500
+"Mini","Cooper Hatch",2021,"Hatchback",14766,4965,"Manual","Petrol",1500
+"Kia","EV6 Gt Line Hatchback Electric 225 Bhp",2022,"Hatchback",24784,27296,"Automatic","Electric",0
+"Vauxhall","Corsa",2021,"Hatchback",11477,13657,"Manual","Petrol",1200
+"Toyota","Yaris Hybrid",2019,"Hatchback",13699,13105,"Automatic","Hybrid",1500
+"Peugeot","2008",2022,"Suv",16696,10597,"Manual","Petrol",1200
+"VW","Tiguan",2020,"Estate",20088,37327,"Automatic","Diesel",2000
+"Honda","HR-V",2020,"Hatchback",13601,41152,"Manual","Diesel",1600
+"Volvo","XC90",2023,"Estate",42823,59397,"Automatic","Hybrid",2000
+"Nissan","Leaf Tekna Electric Hatchback",2018,"Hatchback",8547,38100,"Automatic","Electric",0
+"VW","Tiguan",2021,"Estate",18097,34200,"Manual","Petrol",1500
+"Nissan","Micra",2021,"Hatchback",9445,40748,"Manual","Petrol",1000
+"Mercedes","C300e C-ClassAMG Line 9G-Tronic Saloon",2024,"Saloon",39139,5757,"Automatic","Hybrid",2000
+"Renault","Kadjar",2020,"Hatchback",12367,29463,"Manual","Petrol",1300
+"Vauxhall","Astra 2 Turbo 130 Ultimate Hatchback",2023,"Hatchback",20063,8442,"Manual","Petrol",1200
+"Peugeot","e-2008 Allure SUV",2020,"Suv",12367,20000,"Automatic","Electric",0
+"VW","Golf VIII",2021,"Hatchback",18089,7183,"Manual","Petrol",1500
+"Peugeot","Boxer",2022,"Van",15714,59445,"Manual","Diesel",2200
+"VW","Polo",2023,"Hatchback",15900,3621,"Manual","Petrol",1000
+"Peugeot","e-Expert 1000 Asphalt Premium + Van",2023,"Van",25194,879,"Automatic","Electric",0
+"Vauxhall","Combo Life",2019,"Mpv",12318,32277,"Automatic","Diesel",1500
+"Audi","Q4 Sportback e-tron e-tron 45 S Line [Leather]",2024,"Sportback",35877,2250,"Automatic","Electric",0
+"Nissan","Qashqai",2021,"Suv",17199,29795,"Automatic","Hybrid",1300
+"VW","T6.1",2022,"Van",32719,31478,"Automatic","Diesel",2000
+"Peugeot","Expert 1400",2021,"Van",12599,57136,"Manual","Diesel",2000
+"Audi","Q4 Sportback e-tron e-tron 45 S Line [Leather]",2024,"Sportback",38821,3778,"Automatic","Electric",0
+"Ford","Transit Custom",2021,"Van",21838,40455,"Automatic","Diesel",2000
+"Land Rover","Defender",2021,"Estate",49143,31209,"Automatic","Diesel",3000
+"Hyundai","Tucson",2020,"Estate",14142,64312,"Automatic","Petrol",1600
+"Peugeot","208",2023,"Hatchback",15910,13223,"Automatic","Petrol",1200
+"Vauxhall","Corsa-e SRi Premium Electric Hatchback",2022,"Hatchback",11412,19909,"Automatic","Electric",0
+"Nissan","Qashqai",2020,"Hatchback",13815,61500,"Automatic","Petrol",1300
+"Hyundai","Tucson",2023,"Estate",25413,13301,"Automatic","Hybrid",1600
+"Nissan","Qashqai",2021,"Hatchback",13385,48000,"Manual","Petrol",1300
+"Skoda","Karoq SUV",2022,"Suv",16280,22478,"Manual","Petrol",1000
+"Skoda","Enyaq iV 60 Loft Electric Estate",2022,"Estate",21636,11193,"Automatic","Electric",0
+"Mercedes","E220 E-ClassAMG Line 9G-Tronic Diesel Estate",2017,"Estate",16028,65540,"Automatic","Diesel",2000
+"Kia","Sportage",2021,"Estate",15286,50676,"Automatic","Diesel",1600
+"Land Rover","Range Rover Sport",2021,"Estate",56884,25732,"Automatic","Petrol",5000
+"Peugeot","2008",2022,"Estate",15342,11553,"Manual","Petrol",1200
+"Dacia","Sandero Stepway",2022,"Hatchback",10932,17000,"Manual","Petrol",1000
+"Dacia","Sandero",2021,"Hatchback",8917,23594,"Manual","Petrol",1000
+"Dacia","Duster",2021,"Estate",9465,37354,"Manual","Petrol",1000
+"Honda","Jazz",2020,"Hatchback",12500,23709,"Manual","Petrol",1300
+"VW","T-Roc",2020,"Hatchback",20140,47136,"Automatic","Petrol",1500
+"Hyundai","Tucson",2020,"Estate",16989,31875,"Automatic","Petrol",1600
+"Mini","Cooper S Countryman",2020,"Hatchback",20500,24622,"Automatic","Petrol",2000
+"Skoda","Octavia",2019,"Estate",11747,83433,"Automatic","Diesel",2000
+"Renault","Arkana",2024,"Estate",20271,7120,"Automatic","Hybrid",1600
+"Renault","Arkana",2024,"Estate",20699,3469,"Automatic","Hybrid",1600
+"Nissan","Leaf Tekna Electric Hatchback",2020,"Hatchback",10523,22398,"Automatic","Electric",0
+"Volvo","V90",2022,"Estate",34601,13254,"Automatic","Hybrid",2000
+"Mercedes","GLA200 Sport Executive Petrol Hatchback",2023,"Hatchback",27456,24448,"Automatic","Petrol",1300
+"BMW","218 2 Series Gran Coupe",2022,"Coupe",18334,29935,"Automatic","Petrol",1500
+"Ford","Fiesta Van",2020,"Van",8398,50300,"Manual","Petrol",1100
+"Peugeot","508",2019,"Hatchback",11995,57513,"Automatic","Diesel",2000
+"Peugeot","2008",2024,"Estate",20545,4723,"Automatic","Petrol",1200
+"Land Rover","Defender",2022,"Estate",52114,20948,"Automatic","Diesel",3000
+"Jaguar","F-Pace",2021,"Suv",28008,31673,"Automatic","Diesel",2000
+"Skoda","Kodiaq",2020,"Estate",18301,53899,"Automatic","Diesel",2000
+"Citroën","C5 Aircross",2021,"Suv",14499,25549,"Manual","Petrol",1200
+"Audi","A4 Avant",2022,"Van",23022,25615,"Automatic","Petrol",2000
+"BMW","330e 3 Series TouringM Sport Step",2024,"Touring",33534,11356,"Automatic","Hybrid",2000
+"Ford","Focus Estate",2024,"Estate",17897,23832,"Manual","Hybrid",1000
+"BMW","X5 M X5 M Step Petrol Estate",2023,"Estate",78313,17540,"Automatic","Petrol",4400
+"Renault","Arkana",2022,"Estate",16682,15454,"Automatic","Hybrid",1300
+"Audi","A6 Saloon",2017,"Saloon",12681,67446,"Automatic","Diesel",2000
+"Hyundai","Tucson",2022,"Estate",22570,17982,"Automatic","Hybrid",1600
+"Audi","A5 Sportback",2018,"Sportback",15900,42542,"Manual","Petrol",2000
+"Audi","A4 Avant 35 TDI Technik S Tronic",2022,"Van",23394,19095,"Automatic","Diesel",2000
+"Mercedes","E220 E-Class",2021,"Coupe",24357,46535,"Automatic","Diesel",2000
+"Mercedes","C200 C-Class CoupeAMG Line Edition 9G-Tronic",2021,"Coupe",21809,18678,"Automatic","Hybrid",1500
+"Ford","Focus",2018,"Hatchback",6755,67948,"Manual","Petrol",1000
+"Land Rover","Range Rover Sport",2022,"Estate",73620,18144,"Automatic","Hybrid",3000
+"Tesla","Model Y SUV RWD",2023,"Suv",25610,35679,"Automatic","Electric",0
+"BMW","X3 xLine Step Diesel Estate",2017,"Estate",13770,75308,"Automatic","Diesel",2000
+"Ford","Focus",2021,"Hatchback",13750,33945,"Manual","Hybrid",1000
+"Jaguar","F-Type",2021,"Convertible",34151,17005,"Automatic","Petrol",2000
+"Mercedes","A180 A-ClassSport Diesel Hatchback",2017,"Hatchback",12714,43749,"Automatic","Diesel",1500
+"Honda","Jazz",2023,"Hatchback",16715,8440,"Automatic","Hybrid",1500
+"Nissan","Leaf N-Connecta Electric Hatchback",2021,"Hatchback",10803,13572,"Automatic","Electric",0
+"Ford","Focus",2022,"Hatchback",15605,19935,"Automatic","Petrol",1000
+"Dacia","Sandero",2023,"Hatchback",13138,2200,"Manual","Petrol",1000
+"Nissan","Qashqai",2019,"Hatchback",11394,43187,"Manual","Petrol",1300
+"Ford","Puma",2023,"Suv",17450,3070,"Manual","Hybrid",1000
+"BMW","840 8 Series Gran Coupe",2021,"Coupe",32815,32888,"Automatic","Petrol",3000
+"Audi","A3 Saloon 35 TFSI Sport",2022,"Saloon",20950,13549,"Manual","Petrol",1500
+"Skoda","Enyaq iV 60 ecoSuite SUV",2022,"Suv",18828,26001,"Automatic","Electric",0
+"Renault","Arkana",2024,"Estate",19712,11986,"Automatic","Hybrid",1600
+"Toyota","Corolla Touring Sport",2022,"Touring",20820,21663,"Automatic","Hybrid",2000
+"Peugeot","208",2024,"Hatchback",17974,10,"Manual","Petrol",1200
+"Ford","Focus",2021,"Hatchback",13005,40684,"Manual","Hybrid",1000
+"Kia","Sportage",2022,"Suv",23889,38643,"Automatic","Petrol",1600
+"Skoda","Karoq",2020,"Estate",17835,9102,"Automatic","Petrol",1500
+"Mercedes","C220 C-ClassSE 9G-Tronic Diesel Saloon",2019,"Saloon",16159,42540,"Automatic","Diesel",2000
+"Ford","Mustang Mach-E Extended Range AWD Electric Estate",2021,"Estate",25655,30400,"Automatic","Electric",0
+"Audi","Q3 35 TFSI Sport SUV",2021,"Suv",20996,25117,"Manual","Petrol",1500
+"Jeep","Compass",2022,"Estate",18850,31749,"Automatic","Hybrid",1300
+"Skoda","Karoq",2021,"Estate",15795,50978,"Automatic","Petrol",1500
+"VW","T6.1",2021,"Van",23460,33956,"Manual","Diesel",2000
+"Audi","e-tron Sportback 55 Quattro Launch Edition",2020,"Sportback",26697,43294,"Automatic","Electric",0
+"Ford","Mustang GT",2018,"Coupe",29587,21793,"Automatic","Petrol",5000
+"Kia","e-Niro 4 Electric Estate",2020,"Estate",15156,39193,"Automatic","Electric",0
+"Ford","Focus",2023,"Hatchback",15175,10132,"Manual","Petrol",1000
+"Audi","Q7 Estate 55 TFSI Quattro Black Edition Tiptronic",2022,"Estate",43690,35151,"Automatic","Petrol",3000
+"Ford","Kuga",2023,"Suv",21997,21001,"Automatic","Hybrid",2500
+"Ford","Focus Estate",2016,"Estate",8590,48815,"Manual","Diesel",2000
+"Mercedes","C220 C-Class CoupeCDI AMG Sport Edition",2015,"Coupe",10946,38120,"Automatic","Diesel",2100
+"VW","Tiguan",2022,"Suv",20589,22000,"Manual","Petrol",1500
+"Audi","A3 35 TFSI Technik Petrol Hatchback",2020,"Hatchback",17623,25063,"Manual","Petrol",1500
+"Ford","Kuga",2022,"Suv",15997,48840,"Manual","Petrol",1500
+"Skoda","Kamiq",2024,"Hatchback",18712,10488,"Automatic","Petrol",1500
+"Jeep","Wrangler",2015,"Suv",24950,25761,"Automatic","Petrol",3600
+"Mercedes","C220 C-ClassSport Diesel Saloon",2016,"Saloon",12068,60025,"Automatic","Diesel",2100
+"Land Rover","Range Rover evoque",2021,"Suv",19156,39445,"Manual","Diesel",2000
+"Land Rover","Range Rover Sport Estate",2021,"Estate",33000,70271,"Automatic","Hybrid",2000
+"BMW","X1 18i SE Petrol Estate",2019,"Estate",14552,37471,"Manual","Petrol",1500
+"Renault","Arkana",2024,"Estate",19531,13606,"Automatic","Hybrid",1600
+"VW","Touareg",2019,"Estate",26549,53499,"Automatic","Diesel",3000
+"Land Rover","Range Rover evoque",2023,"Suv",29723,17289,"Automatic","Hybrid",1500
+"Toyota","Yaris Hybrid",2018,"Hatchback",12465,20050,"Automatic","Hybrid",1500
+"Ford","Fiesta",2023,"Hatchback",12545,16906,"Manual","Petrol",1100

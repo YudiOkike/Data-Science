@@ -1,0 +1,96 @@
+install.packages("rvest")
+install.packages("httr")  # Useful for headers & user-agent handling
+install.packages("xml2")  # Helps with HTML parsing
+
+library(rvest)
+library(httr)
+library(xml2)
+library(dplyr)
+
+
+# Load required libraries
+library(rvest)
+library(dplyr)
+# Load required libraries
+library(rvest)
+library(dplyr)
+library(stringr)
+
+# Clear environment
+rm(list = ls())
+gc()
+
+# Define the base URL and number of pages to scrape
+base_url <- "https://www.autouncle.co.uk/en-gb/used-cars?page="
+start_page <- 50  # Start scraping from page 50
+num_pages <- 2  # Adjust if needed (this will scrape pages 50 to 149)
+
+# Function to extract text safely (prevents NULL errors)
+extract_text <- function(node, selector) {
+  result <- node %>% html_element(selector) %>% html_text(trim = TRUE)
+  if (length(result) == 0) return(NA) else return(result)
+}
+
+# Function to scrape a single page
+scrape_page <- function(url) {
+  # Read the HTML content of the page
+  page <- tryCatch(read_html(url), error = function(e) return(NULL))
+  
+  if (is.null(page)) {
+    cat("Failed to load:", url, "\n")
+    return(NULL)
+  }
+  
+  # Extract individual elements using CSS selectors
+  cars_list <- page %>%
+    html_elements(".styles_listing-item__KWJkL") %>%  # Each car listing
+    lapply(function(.x) {
+      data.frame(
+        car_name <- page %>% html_element(".styles_headline__TnlnI") %>% html_text(),
+        year <- page %>% html_element(".styles_highlighted-attributes-container__EH8XY .styles_label__x4zE1:nth-child(1) .styles_text__eMFHA") %>% html_text(),
+        price <- page %>% html_element(".styles_price__X069_") %>% html_text(),
+        mileage <- page %>% html_element(".styles_highlighted-attributes-container__EH8XY .styles_label__x4zE1:nth-child(2) .styles_text__eMFHA") %>% html_text(),
+        transmission <- page %>% html_element(".styles_highlighted-attributes-container__EH8XY .styles_label__x4zE1:nth-child(5) .styles_text__eMFHA") %>% html_text(),
+        fuel <- page %>% html_element(".styles_highlighted-attributes-container__EH8XY .styles_label__x4zE1:nth-child(4) .styles_text__eMFHA") %>% html_text(),
+        engine <- page %>% html_element(".styles_highlighted-attributes-container__EH8XY .styles_label__x4zE1:nth-child(6) .styles_text__eMFHA") %>% html_text(),
+        location <- page %>% html_element(".styles_location-container__dnoXo .styles_text__eMFHA") %>% html_text(),
+        Ad_Link       = paste0("https://www.autouncle.co.uk", extract_text(.x, ".styles_headline__TnlnI")),
+        stringsAsFactors = FALSE
+      )
+    })
+  
+  # Combine the list of data frames into a single data frame
+  cars_data <- do.call(rbind, cars_list)
+  
+  return(cars_data)
+}
+
+# Scrape multiple pages with human-like delays
+all_cars <- lapply(start_page:(start_page + num_pages - 1), function(page_num) {
+  url <- paste0(base_url, page_num)
+  cat("Scraping page:", page_num, "\n")  # Print progress
+  
+  # Introduce a more human-like browsing delay
+  sleep_time <- runif(1, 2, 4)  # Random delay between 2 to 4 seconds
+  
+  # Occasionally take a longer break to mimic real users
+  if (runif(1) < 0.1) {  # 10% chance of a longer pause
+    extra_pause <- runif(1, 5, 10)  # Long pause between 5-10 seconds
+    cat("Taking an extended break for", round(extra_pause, 2), "seconds...\n")
+    Sys.sleep(extra_pause)
+  }
+  
+  cat("Sleeping for", round(sleep_time, 2), "seconds...\n")
+  Sys.sleep(sleep_time)
+  
+  # Scrape the page
+  scrape_page(url)
+}) %>%
+  bind_rows()  # Combine all scraped data into one data frame
+
+# View the scraped data
+View(all_cars)
+skim(all_cars)
+
+# Save the scraped data to a CSV file
+write.csv(all_cars, "autouncle_data.csv", row.names = FALSE)

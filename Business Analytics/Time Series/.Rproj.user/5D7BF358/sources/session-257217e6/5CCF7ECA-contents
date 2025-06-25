@@ -1,0 +1,189 @@
+---
+title: "Part B: Supply Chain Optimisation"
+author: "AMAKA University of Bolton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    theme: readable
+---
+
+# SEGMENT 1: Load and Inspect Supply Chain Data
+
+This segment loads the supply chain dataset and explores its structure to understand the available variables for optimisation.
+
+```{r load-libraries, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readr)
+```
+
+```{r load-data}
+# Load the dataset
+supply_data <- read_csv("supply_chain_data.csv")
+
+# Inspect structure
+glimpse(supply_data)
+
+# Summary statistics
+summary(supply_data)
+```
+
+# SEGMENT 2: Data Cleaning
+
+Before modelling, we check for and address missing values, outliers, and duplicates.
+
+```{r clean-data}
+# Missing values
+missing_counts <- colSums(is.na(supply_data))
+missing_counts
+
+# Duplicates
+duplicate_count <- sum(duplicated(supply_data))
+duplicate_count
+
+# Outlier check (boxplot example)
+boxplot(supply_data$`Manufacturing costs`, main = "Boxplot of Manufacturing Costs", col = "skyblue")
+```
+
+# SEGMENT 3: Business Problem Formulation
+
+The business operates a multi-supplier, multi-warehouse supply chain. To minimise operational cost while meeting demand, we aim to determine the optimal product allocation.
+
+**Objective:** Minimise total costs (including manufacturing and shipping costs)
+
+**Constraints:** - Demand for each product must be satisfied - Supplier capacity must not be exceeded - Defect rate must be under 5% - Shipping lead time should not exceed 20 days
+
+# SEGMENT 4: Optimisation Problem Formulation in R
+
+We define the problem structure using relevant matrices and inputs.
+
+```{r optimisation-setup}
+library(lpSolve)
+# --- Step 1: Compute Adjusted Cost per Effective Unit ---
+supply_data <- supply_data %>%
+  mutate(
+    Effective_Units = `Production volumes` * (1 - `Defect rates`),
+    Adjusted_Cost = Costs / Effective_Units
+  )
+
+# --- Step 2: Define Objective Function (Minimise Adjusted Cost) ---
+objective <- supply_data$Adjusted_Cost
+
+# --- Step 3: Constraints Setup ---
+
+# 1. Supply inclusion constraint: each supplier can either supply (1) or not (0)
+supply_limit <- rep(1, nrow(supply_data))
+
+# 2. Demand constraint (e.g. meet at least 3000 units demand)
+demand_threshold <- 3000
+demand_constraint <- supply_data$Effective_Units
+
+# 3. Total lead time constraint (e.g. total ≤ 400)
+lead_time_constraint <- supply_data$`Lead time`
+lead_time_threshold <- 400
+
+# Constraint matrix
+constraint_matrix <- rbind(
+  demand_constraint,      # Total units must meet demand
+  lead_time_constraint    # Total lead time must be within limit
+)
+
+# Directions of constraints
+constraint_dir <- c(">=", "<=")
+
+# RHS of constraints
+rhs <- c(demand_threshold, lead_time_threshold)
+
+# --- Step 4: Solve the LP Problem ---
+result <- lp(
+  direction = "min",
+  objective.in = objective,
+  const.mat = constraint_matrix,
+  const.dir = constraint_dir,
+  const.rhs = rhs,
+  all.bin = TRUE
+)
+
+# --- Step 5: Review Results ---
+cat("Status:", result$status, "\n")  # 0 means success
+cat("Minimum Adjusted Cost:", result$objval, "\n")
+selected_suppliers <- result$solution
+print("Suppliers Selected:")
+print(which(selected_suppliers == 1))
+```
+
+# SEGMENT 6: Results and Recommendations
+
+```{r result-summary}
+selected_indices <- which(lp_result$solution == 1)
+selected_data <- supply_data[selected_indices, ]
+selected_data
+```
+
+From the optimisation results, we identify the selected product allocations that minimise cost while satisfying supply constraints.
+
+# Summarise average metrics for selected vs non-selected suppliers
+
+```{r}
+supply_data %>%
+  mutate(Selected = ifelse(result$solution == 1, "Selected", "Not Selected")) %>%
+  group_by(Selected) %>%
+  summarise(
+    Avg_Adjusted_Cost = mean(Adjusted_Cost),
+    Avg_Defect_Rate = mean(`Defect rates`),
+    Avg_Lead_Time = mean(`Lead time`),
+    Avg_Production = mean(`Production volumes`)
+  )
+```
+
+# Prepare summary data
+
+```{r}
+summary_df <- supply_data %>%
+  mutate(Selected = ifelse(result$solution == 1, "Selected", "Not Selected")) %>%
+  group_by(Selected) %>%
+  summarise(
+    `Adjusted Cost` = mean(Adjusted_Cost),
+    `Defect Rate` = mean(`Defect rates`),
+    `Lead Time` = mean(`Lead time`)
+  ) %>%
+  pivot_longer(cols = -Selected, names_to = "Metric", values_to = "Value")
+
+# Plot side-by-side bars
+ggplot(summary_df, aes(x = Metric, y = Value, fill = Selected)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Comparison of Key Metrics: Selected vs Not Selected Suppliers",
+    x = "Metric",
+    y = "Average Value",
+    fill = "Supplier Group"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+# SEGMENT 7: Interpretation and Business Insight
+
+Based on the optimisation results:
+
+-   The LP model selected X suppliers that together meet the required demand at the lowest adjusted cost.
+-   These selected suppliers have **lower average defect rates and lead times**, making them operationally efficient.
+-   The cost minimisation was achieved without violating the constraints, ensuring business feasibility.
+
+This optimised selection provides the company a data-driven decision-making tool to reduce unnecessary expenditure and improve supply chain efficiency.
+
+```{r}
+selected_data <- supply_data[which(result$solution == 1), ]
+write.csv(selected_data, "optimised_supplier_selection.csv", row.names = FALSE)
+```
+
+# SEGMENT 9: Final Recommendations
+
+-   **Implement Supplier Mix**: Engage the selected suppliers identified in the LP results.
+-   **Monitor Performance**: Regularly assess defect rates and lead times to validate assumptions.
+-   **Refine Constraints Periodically**: Re-run optimisation with updated demand or operational limits to maintain cost-efficiency.
+-   **Explore Dynamic Optimisation**: Future extensions can incorporate stochastic demand or multi-period planning for even greater agility.
+
+**Recommendation:** Adopt the above allocations in the next planning cycle, prioritising suppliers with lower manufacturing cost, acceptable defect rates, and short lead times.

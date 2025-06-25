@@ -1,0 +1,4 @@
+"0","# Load the dataset"
+"0","supply_data <- read_csv(""supply_chain_data.csv"")"
+"2","Error: 'supply_chain_data.csv' does not exist in current working directory ('/Users/yudi/Downloads').
+"

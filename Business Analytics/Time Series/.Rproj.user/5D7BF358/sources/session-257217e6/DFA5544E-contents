@@ -1,0 +1,121 @@
+
+---
+title: "Optimisation - Supplier Route Risk Minimisation"
+author: "Udochukwu Okike 2423983"
+date: "2025-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r clean, include=TRUE}
+rm(list = ls())
+gc()
+```
+
+```{r packages, message=FALSE}
+packages <- c("tidyverse", "lpSolve", "readr", "ggplot2")
+
+load_packages <- function(pkg_list) {
+  for (pkg in pkg_list) {
+    if (!require(pkg, character.only = TRUE)) {
+      install.packages(pkg, dependencies = TRUE)
+      library(pkg, character.only = TRUE)
+    }
+  }
+}
+load_packages(packages)
+```
+
+## 1. Load and Prepare Data
+
+```{r load-data}
+data <- read_csv("supply_chain_data.csv")
+
+opt_data <- data %>%
+  mutate(
+    Defect_Rate = `Defect rates`,
+    Inspection_Fail = ifelse(`Inspection results` == "Fail", 1, 0),
+    Transport_Mode = `Transportation modes`,
+    Cost = `Costs`,
+    Lead_Time = `Lead time`
+  ) %>%
+  mutate(
+    Transport_Risk = case_when(
+      Transport_Mode == "Air" ~ 1,
+      Transport_Mode == "Road" ~ 2,
+      Transport_Mode == "Rail" ~ 3,
+      TRUE ~ 2
+    ),
+    Risk_Score = 0.5 * Defect_Rate + 0.3 * Inspection_Fail + 0.2 * Transport_Risk,
+    Adjusted_Cost = Cost * (1 + Risk_Score)
+  )
+```
+
+## 2. Optimisation Problem Formulation
+
+Objective: Minimise total `Risk_Score` for selected supplier-route combinations.
+
+Constraints:
+- Total `Cost` ≤ 30,000
+- Total `Lead_Time` ≤ 350 days
+- Only one option selected per `SKU`
+
+```{r formulate-optimisation}
+opt_df <- opt_data %>%
+  select(SKU, Supplier = `Supplier name`, Route = `Routes`, Cost, Lead_Time, Risk_Score, Adjusted_Cost)
+
+n <- nrow(opt_df)
+
+f.obj <- opt_df$Risk_Score
+f.con1 <- opt_df$Cost
+f.con2 <- opt_df$Lead_Time
+sku_levels <- unique(opt_df$SKU)
+f.con3 <- sapply(sku_levels, function(sku) as.numeric(opt_df$SKU == sku)) %>% t()
+
+f.con <- rbind(f.con1, f.con2, f.con3)
+f.dir <- c("<=", "<=", rep("=", length(sku_levels)))
+f.rhs <- c(30000, 350, rep(1, length(sku_levels)))
+f.bin <- rep(1, n)
+
+opt_result <- lp("min", f.obj, f.con, f.dir, f.rhs, binary.vec = 1:n)
+selected <- opt_df[which(opt_result$solution == 1), ]
+df_lp <- selected
+```
+
+## 3. Results & Interpretation
+
+```{r results}
+print(selected %>% select(SKU, Supplier, Route, Cost, Lead_Time, Risk_Score))
+
+total_cost <- sum(selected$Cost)
+total_lead_time <- sum(selected$Lead_Time)
+total_risk <- sum(selected$Risk_Score)
+
+cat("\nTotal Cost:", total_cost,
+    "\nTotal Lead Time:", total_lead_time,
+    "\nTotal Risk Score:", total_risk)
+```
+
+### Barchart
+
+```{r supplier-cost-chart}
+supplier_costs <- df_lp %>%
+  group_by(Supplier) %>%
+  summarise(Adjusted_Cost_Total = sum(Adjusted_Cost)) %>%
+  arrange(desc(Adjusted_Cost_Total))
+
+ggplot(supplier_costs, aes(x = reorder(Supplier, -Adjusted_Cost_Total), y = Adjusted_Cost_Total)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Bar Chart of Adjusted Costs by Supplier",
+       x = "Supplier", y = "Total Adjusted Cost") +
+  theme_minimal(base_size = 12)
+```
+
+## 4. Recommendation
+
+- Adopt the selected supplier-route pairs to minimise operational risks.
+- All solutions meet cost and lead-time constraints, and address inspection and defect risks.
+- Consider extending this model to include inventory levels or carbon impact as future constraints.

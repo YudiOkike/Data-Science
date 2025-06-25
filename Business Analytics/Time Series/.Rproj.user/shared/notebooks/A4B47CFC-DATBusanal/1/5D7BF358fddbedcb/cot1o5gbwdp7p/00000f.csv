@@ -1,0 +1,8 @@
+"0","# Calculate index for 80/20 train-test split"
+"0","n <- length(ts_y)"
+"0","split_idx <- floor(0.8 * n)"
+"0","# Create training and test sets for both dependent and exogenous variables"
+"0","train_y <- window(ts_y, end = time(ts_y)[split_idx])"
+"0","train_x <- window(ts_x, end = time(ts_x)[split_idx])"
+"0","test_y  <- window(ts_y, start = time(ts_y)[split_idx + 1])"
+"0","test_x  <- window(ts_x, start = time(ts_x)[split_idx + 1])"

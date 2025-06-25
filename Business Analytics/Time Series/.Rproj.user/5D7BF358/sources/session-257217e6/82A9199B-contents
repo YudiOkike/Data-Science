@@ -1,0 +1,175 @@
+# Load necessary libraries
+install.packages ("'forecast") 
+install.packages ("tseries") 
+install.packages ("tidyverse")
+library(forecast)
+library(tseries)
+library(tidyverse)
+
+# Read the AEP_hourly.csv dataset
+energy_data <- read_csv("AEP_hourly.csv")
+head(energy_data)
+
+#In R, POSIXct is a class used to represent date-time values as the number of seconds
+#is commonly used for storing and manipulating precise date-time data in a continuous, numeric format.
+# Convert the 'Datetime' column to a proper date-time format
+energy_data$Datetime <- as.POSIXct(energy_data$Datetime, format = "%Y-%m-%d %H:%M:%S")
+View(energy_data)
+
+# Create separate columns for year, month, day, and hour
+energy_data$Year <-  as.numeric(format(energy_data$Datetime, "%Y"))
+energy_data$Month <- as.numeric(format(energy_data$Datetime, "%m"))
+energy_data$Day <- as.numeric(format(energy_data$Datetime, "%d"))
+energy_data$Hour <- as.numeric(format(energy_data$Datetime, "%H"))
+View(energy_data)
+
+# Remove unnecessary columns
+energy_data <- energy_data %>% select(-Datetime)
+View(energy_data)
+
+
+# Determine the number of hours in the dataset
+n_hours <- nrow(energy_data)
+n_hours
+
+# Convert the dataset to a time series object
+energy_ts <- ts(energy_data$AEP_MW, start = c(2002, 1), frequency = 24 * 365.25)
+View(energy_ts)
+
+# Determine the index of the last observation in the training set
+train_end_idx <- which(energy_data$Year == 2015 &
+  energy_data$Month == 12 &
+  energy_data$Day == 31 &
+  energy_data$Hour == 23)[1]
+train_end_idx
+# In case train_end_idx is not found,
+#calculate it using the total number of hours in the training set
+if (is.na(train_end_idx)) {
+  train_end_idx <- as.integer((2015 - 2002 + 1) * 365.25 * 24)
+}
+# Split the dataset into training and testing sets
+train_data <- energy_ts [1: train_end_idx]
+test_data <- energy_ts[(train_end_idx + 1):n_hours]
+
+# Fit the ARIMA model
+arima_model <- auto.arima (train_data, seasonal = TRUE, stepwise = TRUE)
+# Forecast using the ARIMA model
+arima_forecast <- forecast(arima_model, h = length(test_data))
+print (arima_model)
+
+# Create a linear regression dataset
+regression_data <- data.frame(Energy = as.numeric(energy_data$AEP_MW),
+                               Year = energy_data$Year,
+                               Month = energy_data$Month,
+                               Day = energy_data$Day,
+                               Hour = energy_data$Hour)
+# Split the regression dataset into training and testing sets
+train_data_regression <- regression_data %>% filter(Year < 2016) 
+test_data_regression <- regression_data %>% filter(Year >= 2016)
+# Fit the Standard Regression model
+regression_model <- lm(Energy ~ Year + Month + Day + Hour, data = train_data_regression)
+# Forecast using the Standard Regression mode7
+regression_forecast <- predict(regression_model, test_data_regression)
+# Calculate the Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE)
+mae_arima <- mean(abs(test_data - arima_forecast$mean))
+rmse_arima <- sqrt(mean((test_data - arima_forecast$mean)^2))
+mae_regression <- mean(abs(test_data - regression_forecast)) 
+rmse_regression <- sqrt(mean((test_data - regression_forecast)^2))
+# Display the performance metrics
+cat ("ARIMA Model: MAE =", mae_arima, "
+, RMSE =", rmse_arima, "\n")
+cat ("Standard Regression Model: MAE ="
+     , mae_regression, ", RMSE =" , rmse_regression)
+
+# Model diagnostics for ARIMA model
+checkresiduals(arima_model)
+# Plot histogram of residuals
+hist(arima_model$residuals,
+     main = "Histogram of ARIMA Model Residuals",
+     xlab = "Residuals", col = "lightgreen")
+
+# Perform Ljung-Box test
+Box.test(arima_model$residuals, lag = 10, type = "Ljung-Box",
+         fitdf = arima_model$p + arima_model$q)
+
+# Calculate residuals for the Standard Regression mode 7
+regression_residuals <- residuals(regression_model)
+# ⁠Plot histogram of residuals
+hist(regression_residuals, main = "Histogram of Standard Regression Model Residuals",
+     xlab = "Residuals", col = "lightyellow")
+# Perform Ljung-Box test
+Box.test (regression_residuals, lag = 10, type = "Ljung-Box", fitdf = 4)
+# fitdf = 4 because of 4 predictors: Year, Month, Day, Hour
+
+
+#############################################‹#########################AA##########A######$##@@@@@@@@@@@@$$$$$$$$@#
+
+# Filter data for summer months
+summer_data <- energy_data %>% filter (Month %in% c(6, 7, 8))
+# Convert summer_data to time series object
+summer_ts <- ts(summer_data$AEP_MW, start = c(2002, 1),
+                frequency = 24 * 365.25 / 4)
+
+# 1/4th of the frequency as only summer months
+# Split the dataset into training and testing sets
+summer_train_end_idx <- which(summer_data$Year == 2015 &
+                                summer_data$Month == 8 & 
+                                summer_data$Day == 31 & 
+                                summer_data$Hour == 23) [1]
+summer_train_data <- summer_ts [1: summer_train_end_idx] 
+summer_test_data <- summer_ts [(summer_train_end_idx + 1):
+                                 length(summer_ts)]
+# Fit the ARIMA and Standard Regression models for summer
+#data and evaluate their performance (follow steps 5 and 6 from the tutorial)
+
+###########!!!!!!!!!!!!!(((((((((((((((((((((((((((((((((((((((((!!!!!!!!!!!!!!)))))))))))))))))))))))))))))))))))))))))
+summer_data
+# Fit the ARIMA model
+summer_arima_model <- auto.arima (summer_train_data, seasonal = TRUE, stepwise = TRUE)
+# Forecast using the ARIMA model
+summer_arima_forecast <- forecast(summer_arima_model, h = length(summer_test_data))
+print (summer_arima_model)
+
+# Create a linear regression dataset
+summer_regression_data <- data.frame(Energy = as.numeric(summer_data$AEP_MW),
+                              Year = summer_data$Year,
+                              Month = summer_data$Month,
+                              Day = summer_data$Day,
+                              Hour = summer_data$Hour)
+# Split the regression dataset into training and testing sets
+summer_train_data_regression <- summer_regression_data %>% filter(Year < 2016) 
+summer_test_data_regression <- summer_regression_data %>% filter(Year >= 2016)
+# Fit the Standard Regression model
+summer_regression_model <- lm(Energy ~ Year + Month + Day + Hour, data = summer_train_data_regression)
+# Forecast using the Standard Regression mode7
+summer_regression_forecast <- predict(summer_regression_model, summer_test_data_regression)
+# Calculate the Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE)
+summer_mae_arima <- mean(abs(summer_test_data - summer_arima_forecast$mean))
+summer_rmse_arima <- sqrt(mean((summer_test_data - summer_arima_forecast$mean)^2))
+summer_mae_regression <- mean(abs(summer_test_data - summer_regression_forecast)) 
+summer_rmse_regression <- sqrt(mean((summer_test_data - summer_regression_forecast)^2))
+# Display the performance metrics
+cat ("summer_ARIMA Model: MAE =", summer_mae_arima, "
+, summer_RMSE =", summer_rmse_arima, "\n")
+cat ("Standard Regression Model: summer_MAE ="
+     , summer_mae_regression, ", summer_RMSE =" , summer_rmse_regression)
+
+# Model diagnostics for ARIMA model
+checkresiduals(summer_arima_model)
+# Plot histogram of residuals
+hist(summer_arima_model$residuals,
+     main = "Histogram of ARIMA Model Residuals",
+     xlab = "Residuals", col = "lightgreen")
+
+# Perform Ljung-Box test
+Box.test(summer_arima_model$residuals, lag = 10, type = "Ljung-Box",
+         fitdf = summer_arima_model$p + summer_arima_model$q)
+
+# Calculate residuals for the Standard Regression mode 7
+summer_regression_residuals <- residuals(summer_regression_model)
+# ⁠Plot histogram of residuals
+hist(summer_regression_residuals, main = "Histogram of Standard Regression Model Residuals",
+     xlab = "Residuals", col = "lightyellow")
+# Perform Ljung-Box test
+Box.test(summer_regression_residuals, lag = 10, type = "Ljung-Box", fitdf = 4)
+# fitdf = 4 because of 4 predictors: Year, Month, Day, Hour

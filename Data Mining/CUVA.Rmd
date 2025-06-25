@@ -1,0 +1,506 @@
+---
+title: 'Assessment Number 1: Portfolio 2 of 4'
+author: "C.U.V.A."
+student ID: Chiamaka Chijioke (2423904), 
+            Udochukwu Okike (2423893), 
+            Victor Ene (2318217), 
+            Amarachi Eche (2423917)
+date: "2025-03-20"
+---
+
+# 1.0 Library and Package Installation
+
+```{r Install and Load Packages}
+# Define a set of required packages for data analysis, web scraping, and visualization
+packages <- c("tidyverse", "rvest", "xml2", "httr", "skimr", "reshape2")
+
+# Install any packages that are not already installed
+install.packages(setdiff(packages, installed.packages()[, "Package"]), dependencies = TRUE)
+
+# Load the necessary libraries
+library(tidyverse)    # For data manipulation and visualizationIncludes dplyr, ggplot2, readr, stringr, purrr, etc.
+library(rvest)        # For web scraping (HTML parsing)
+library(xml2)         # Backend for rvest, parses XML/HTML documents
+library(httr)         # For HTTP requests
+library(skimr)        # For generating summary statistics
+library(reshape2)     # For correlation heatmap
+```
+
+# 2.0 Site 1: CAR SITE
+
+## 2.1 Webscraping
+
+```{r CarSite Scraping}
+# Function to generate the URL for a specific page number on CarSite
+get_carsite_url <- function(page_num) {
+  paste0("https://www.carsite.co.uk/used-car/page/", page_num)  # Concatenate base URL with page number
+}
+
+# Safely extract text from an HTML node, returning NA if the selector fails
+safe_extract <- function(node, selector) {
+  result <- node %>% html_element(selector) %>% html_text(trim = TRUE)  # Extract text and trim whitespace
+  if (length(result) == 0) return(NA) else return(result)  # Return NA if no result, otherwise the text
+}
+
+# Function to scrape car data from a single CarSite page
+scrape_carsite_page <- function(page_num) {
+  url <- get_carsite_url(page_num)  # Generate URL for the page
+  cat("Scraping Page:", page_num, "\n")  # Print progress message
+  response <- GET(url, user_agent("CUVA for Educational Use")) # For client identification 
+  page <- tryCatch(read_html(url), error = function(e) NULL)  # Attempt to read the page, return NULL on error
+  if (is.null(page)) return(NULL)  # Exit if page loading failed
+  
+  cars <- page %>% html_elements(".paContainer")  # Select all car listing containers
+  
+  # Map over each car listing to extract data into a data frame
+  car_data <- map_df(cars, function(car) {
+    data.frame(
+      Car_Name = safe_extract(car, "h3.avlink a"),              # Car name from the link title
+      Price = safe_extract(car, "h4.advertprice"),             # Price from the advert
+      Mileage = safe_extract(car, "div.section28.fl:nth-child(2)"),  # Mileage from second div
+      Transmission = safe_extract(car, "div.section28.fl.mr1p:nth-child(1)"),  # Transmission type
+      Fuel_Type = safe_extract(car, "div.section28.fl:nth-child(4)"),  # Fuel type
+      Engine_Size = safe_extract(car, "div.section28.fl.mr1p:nth-child(5)"),  # Engine size
+      Doors = safe_extract(car, "div.section28.fl:nth-child(6)"),  # Number of doors
+      Color = safe_extract(car, "div.section28.fl.mr1p:nth-child(3)"),  # Car color
+      Year_Model = safe_extract(car, ".section.f-12.pos-rel span.tal")  # Year and model info
+    )
+  })
+  Sys.sleep(runif(1, 2, 5))  # Random delay between 2-5 seconds to avoid overloading the server
+  return(car_data)  # Return the scraped data
+}
+
+# Scrape data from pages 1 to 300 and combine into a single data frame
+carsite_raw <- map_df(1:300, scrape_carsite_page)
+View(carsite_raw)  # Display the raw scraped data
+```
+
+## 2.2 Data Preprocessing
+
+```{r}
+# Tidy and preprocess the raw CarSite data
+carsite_data <- carsite_raw %>%
+  mutate(Price = parse_number(Price),             # Convert Price to numeric, removing non-numeric characters
+         Mileage = parse_number(Mileage),         # Convert Mileage to numeric
+         Year = as.numeric(str_extract(Year_Model, "^\\s*(\\d{4})")),           # Ensure Year is numeric
+         Fuel_Type = if_else(Fuel_Type == "-", "Hybrid", Fuel_Type), # Replace "-" in Fuel_Type with "Hybrid"
+         Engine_Size = if_else(Engine_Size == "-", NA_character_, Engine_Size), # Replace "-" with NA
+         Engine_Size = parse_number(Engine_Size)) %>%  # Convert Engine_Size to numeric
+  extract(Year_Model, into = c("Year", "Make", "Model", "Car_Type"),  # Split Year_Model into components
+          regex = "^\\s*(\\d{4})\\s+((?:Land\\s+Rover)|\\S+)\\s+(.+?)\\s+(\\S+)\\s*$",
+          remove = FALSE) %>%  # Use regex to extract Year, Make, Model, and Car_Type
+ 
+# Select and rename columns for consistency and clarity
+  select(Car_Brand = Make,                # Rename Make to Car_Brand
+         Car_Model = Model,              # Rename Model to Car_Model
+         `Price (£)` = Price,            # Rename Price with units
+         `Mileage (miles)` = Mileage,    # Rename Mileage with units
+         `Engine_Size (cc)` = Engine_Size,  # Rename Engine_Size with units
+         Fuel = Fuel_Type)               # Rename Fuel_Type to Fuel
+
+print(tail(carsite_data, 10))  # Show sample
+```
+
+# 3.0 Site 2: Autouncle
+
+## 3.1 Webscrapping
+
+```{r}
+# Define base URL and parameters for scraping Autouncle
+base_url <- "https://www.autouncle.co.uk/en-gb/used-cars?page="
+start_page <- 1
+num_pages <- 100
+
+# Function to extract text from an HTML node, returning NA if empty
+extract_text <- function(node, selector) {
+  node %>% html_element(selector) %>% html_text(trim = TRUE) %>% ifelse(. == "", NA, .)  # Extract and handle empty results
+}
+
+# Function to scrape car data from a single Autouncle page
+scrape_page <- function(url) {
+  page <- tryCatch(read_html(url), error = function(e) NULL)  # Attempt to read the page, return NULL on error
+  if (is.null(page)) return(NULL)  # Exit if page loading failed
+  
+  # Extract car listings and map to a data frame
+  page %>% html_elements(".styles_listing-item__KWJkL") %>%
+    map_df(~ data.frame(
+      Make_Model = extract_text(.x, ".styles_headline__TnlnI"),  # Combined make and model
+      Price = extract_text(.x, ".styles_price__X069_"),         # Price of the car
+      Mileage = extract_text(.x, ".styles_label__x4zE1:nth-child(2) .styles_text__eMFHA"),  # Mileage
+      Year = extract_text(.x, ".styles_highlighted-attributes-container__EH8XY .styles_label__x4zE1:nth-child(1) .styles_text__eMFHA"),  # Year
+      Transmission = extract_text(.x, ".styles_label__x4zE1:nth-child(3) .styles_text__eMFHA"),  # Transmission
+      Fuel_Type = extract_text(.x, ".styles_highlighted-attributes-container__EH8XY .styles_label__x4zE1:nth-child(4) .styles_text__eMFHA"),  # Fuel type
+      Power = extract_text(.x, ".styles_label__x4zE1:nth-child(6) .styles_text__eMFHA"),  # Engine power
+      stringsAsFactors = FALSE  # Prevent factor conversion
+    ))
+}
+
+# Scrape data from 100 pages and combine into a single data frame
+all_cars <- map_df(start_page:(start_page + num_pages - 1), function(page_num) {
+  url <- paste0(base_url, page_num)  # Construct URL for the page
+  cat("Scraping page:", page_num, "\n")  # Print progress message
+  sleep_time <- runif(1, 2, 4)  # Random delay between 2-4 seconds
+  if (runif(1) < 0.1) { Sys.sleep(runif(1, 5, 10)) }  # Occasionally add a longer delay (5-10 seconds)
+  Sys.sleep(sleep_time)  # Apply the delay
+  scrape_page(url)  # Scrape the page
+})
+View(all_cars)
+```
+
+## 3.2 Data Preprocessing
+
+```{r}
+# Function to clean Mileage by removing non-numeric characters
+clean_mileage <- function(data) {
+  data %>%
+    mutate(Mileage = parse_number(Mileage))
+}
+
+# Function to split Fuel_Type and extract Engine_Size
+split_fuel_engine <- function(data) {
+  data %>%
+    mutate(
+      Engine_Size = ifelse(str_detect(Fuel_Type, "\\d\\.\\dL"),  # Check if Fuel_Type contains engine size (e.g., 2.0L)
+                           str_extract(Fuel_Type, "\\d\\.\\dL"),  # Extract engine size
+                           "0.0"),  # Default to 0.0 if not found(Electric cars don't have Engines)
+      Fuel = str_remove(Fuel_Type, "\\d\\.\\dL\\s*"),  # Remove engine size from Fuel_Type
+      Fuel = str_trim(Fuel)  # Trim whitespace
+    )
+}
+
+# Function to convert Engine_Size from liters to cubic centimeters (cc)
+convert_engine_to_cc <- function(data) {
+  data %>%
+    mutate(
+      Engine_Size = as.numeric(str_remove(Engine_Size, "L")),  # Remove "L" and convert to numeric
+      `Engine_Size (cc)` = Engine_Size * 1000  # Convert liters to cc
+    ) %>%
+    select(-Engine_Size)  # Drop the original Engine_Size column
+}
+
+# Function to clean Price by removing currency symbols and commas
+clean_price <- function(data) {
+  data %>%
+    mutate(
+      `Price (£)` = as.numeric(str_remove_all(Price, "[£,]"))  # Remove £ and commas, convert to numeric
+    ) %>%
+    select(-Price)  # Drop the original Price column
+}
+
+# Function to extract Car Type from Make_Model using a predefined list
+extract_car_type <- function(data) {
+  car_types <- c("Saloon", "Hatchback", "SUV", "Sports Utility Vehicle",
+                 "Crossover", "Coupe", "Coupé", "Convertible", "Cabriolet",
+                 "Estate", "Pick[- ]?up(?: Truck)?", "Minivan", "MPV",
+                 "Roadster", "Van", "Cargo Van", "City Car", "Microcar",
+                 "Liftback", "Fastback", "Targa(?: Top)?", "Limousine",
+                 "Supercar", "Hypercar", "4x4", "Off[- ]?Roader", "Muscle Car",
+                 "Coupe SUV", "Campervan", "Recreational Vehicle", "RV",
+                 "Sportback", "Panel Van", "Combi Van", "Touring",
+                 "Shooting Brake", "Double Cab", "Quad Cab",
+                 "Extended Cab", "Supercrew", "Hardtop", "Softtop")
+  
+  car_type_pattern <- paste0("(?i)(", paste(car_types, collapse = "|"), ")")  # Create regex pattern for car types
+  
+  data %>%
+    mutate(`Car Type` = str_extract(Make_Model, car_type_pattern),  # Extract car type from Make_Model
+           `Car Type` = str_to_title(str_trim(`Car Type`)))  # Capitalize and trim
+}
+
+# Function to extract Car Brand from Make_Model using a predefined list
+extract_car_brand <- function(data) {
+  brands <- c("Abarth", "AC", "Acura", "Aixam", "Alfa Romeo", "Alpine", 
+              "Aston Martin", "Audi", "Austin", "Bentley", "BMW", "Bugatti", 
+              "Buick", "Cadillac", "Caterham", "Chevrolet", "Chrysler", 
+              "Citroën", "Cupra", "Dacia", "Daewoo", "Daihatsu", "Dodge", 
+              "DS Automobiles", "Eagle", "Ferrari", "Fiat", "Fisker", 
+              "Ford", "Genesis", "GMC", "Great Wall", "Haval", "Holden", 
+              "Honda", "Hummer", "Hyundai", "Infiniti", "Isuzu", "Jaguar", 
+              "Jeep", "Kia", "Lada", "Lamborghini", "Lancia", "Land Rover", 
+              "Lexus", "Lincoln", "Lotus", "Mahindra", "Maserati", "Maybach", 
+              "Mazda", "McLaren", "Mercedes", "MG", "Mini", "Mitsubishi", 
+              "Nissan", "Oldsmobile", "Opel", "Pagani", "Peugeot", "Plymouth", 
+              "Polestar", "Pontiac", "Porsche", "Proton", "Ram", "Range Rover", 
+              "Renault", "Rolls-Royce", "Rover", "Saab", "Seat", "Skoda", 
+              "Smart", "SsangYong", "Subaru", "Suzuki", "Tata", "Tesla", 
+              "Toyota", "Vauxhall", "Volkswagen", "VW", "Volvo", "Wiesmann", "Zotye")
+  brands <- brands[order(nchar(brands), decreasing = TRUE)]  # Sort brands by length (longest first)
+  
+  data %>%
+    mutate(
+      Car_brand = sapply(Make_Model, function(make_model) {  # Apply function to each Make_Model
+        brand_found <- NA
+        for (brand in brands) {  # Loop through brands
+          if (str_starts(make_model, brand)) {  # Check if Make_Model starts with the brand
+            brand_found <- brand
+            break
+          }
+        }
+        return(brand_found)  # Return the matched brand or NA
+      }),
+      Make_Model = str_trim(ifelse(is.na(Car_brand), Make_Model,  # Remove brand from Make_Model if found
+                                   str_remove(Make_Model, paste0("^", Car_brand))))
+    )
+}
+
+# Function to extract Car Model from remaining Make_Model text
+extract_car_model <- function(data) {
+  data %>%
+    mutate(
+      Car_model = if_else(
+        str_detect(Make_Model, "\\s\\d\\.\\d"),  # Check for engine size pattern (e.g., "2.0")
+        str_trim(str_extract(Make_Model, ".*?(?=\\s\\d\\.\\d)")),  # Extract text before engine size
+        str_trim(Make_Model)  # Otherwise use the full remaining text
+      )
+    )
+}
+
+# Function to clean Year by extracting a 4-digit year
+clean_year <- function(data) {
+  data %>%
+    mutate(
+      Year = case_when(
+        str_detect(Year, "\\b\\d{4}\\b") ~ str_extract(Year, "\\b\\d{4}\\b"),  # Extract 4-digit year
+        TRUE ~ NA_character_  # Return NA if no match
+      ),
+         Year = as.numeric(Year)  # Convert to numeric
+    )
+}
+
+# Function to further clean Car_model by removing unwanted terms
+final_clean_car_model <- function(data) {
+  data %>%
+    mutate(
+      Car_model = str_split(Car_model, "\\s+") %>%  # Split into words
+        lapply(function(words) {
+          words_clean <- words[!str_detect(tolower(words), "dr|kwh|kw|auto")]  # Remove specific terms
+          paste(words_clean, collapse = " ")  # Rejoin words
+        }) %>%
+        unlist() %>%  # Convert back to vector
+        str_squish()  # Remove extra whitespace
+    )
+}
+
+# Execute the cleaning pipeline for Autouncle data
+auto_cars <- all_cars %>%
+  clean_mileage() %>%              # Clean mileage values
+  split_fuel_engine() %>%          # Split fuel and engine size
+  convert_engine_to_cc() %>%       # Convert engine size to cc
+  clean_price() %>%                # Clean price values
+  extract_car_type() %>%           # Extract car type
+  extract_car_brand() %>%          # Extract car brand
+  extract_car_model() %>%          # Extract car model
+  clean_year() %>%                 # Clean year values
+  final_clean_car_model() %>%      # Final cleanup of car model
+  select(-Make_Model, -Fuel_Type, -Power)  # Drop unnecessary columns
+
+head(auto_cars, 10)  # Display the cleaned Autouncle data
+```
+
+# 4.0 Merging Datasets Handling Missing Values and Detecting Outliers
+
+```{r}
+
+# Align column names of Autouncle data with CarSite data
+auto_cars_aligned <- auto_cars %>%
+  rename(
+    Car_Brand = Car_brand,              # Rename to match CarSite
+    Car_Model = Car_model,              # Rename to match CarSite
+    Car_Type = `Car Type`,              # Rename to match CarSite
+    `Mileage (miles)` = Mileage         # Rename to match CarSite
+  ) %>%
+  select(
+    Car_Brand, Car_Model, Year, Car_Type, `Price (£)`, `Mileage (miles)`, Transmission, Fuel, `Engine_Size (cc)`
+  )  # Select and order columns to match CarSite
+
+# Combine the two datasets and standardize column names
+Used_cars <- bind_rows(carsite_data, auto_cars_aligned) %>%
+  distinct() %>%  # Remove duplicates
+  rename(
+    Price_in_GBP = `Price (£)`,           # Rename with more descriptive name
+    Mileage_in_miles = `Mileage (miles)`, # Rename with more descriptive name
+    Engine_Size_in_cc = `Engine_Size (cc)` # Rename with more descriptive name
+  ) %>%
+  select(Car_Brand, Car_Model, Year, Car_Type, Price_in_GBP, Mileage_in_miles, Transmission, Fuel, Engine_Size_in_cc) %>% # Reorder columns
+  drop_na()  # Remove rows with any missing values
+
+View(Used_cars)  # Display the merged dataset
+skim(Used_cars)  # Generate summary statistics
+write.csv(Used_cars, "Used_cars.csv", row.names = FALSE)  # Export the merged dataset to a CSV file
+```
+
+## 4.1 Outlier Analysis
+
+```{r}
+# Define outlier detection function
+detect_outliers_iqr <- function(x) {
+  q <- quantile(x, c(0.25, 0.75), na.rm = TRUE)
+  iqr <- diff(q)
+  x < q[1] - 1.5 * iqr | x > q[2] + 1.5 * iqr
+}
+
+#Quick outlier check using IQR (Detection only)
+outlier_summary <- Used_cars %>%
+  summarise(across(c(Price_in_GBP, Mileage_in_miles, Engine_Size_in_cc),
+                   ~sum(detect_outliers_iqr(.)), .names = "{col}_outliers")) %>%
+  print()
+
+# Example high-price outliers
+high_price_outliers <- Used_cars %>%
+  filter(detect_outliers_iqr(Price_in_GBP)) %>%
+  arrange(desc(Price_in_GBP)) %>%
+  select(Car_Brand, Car_Model, Year, Price_in_GBP, Mileage_in_miles, Engine_Size_in_cc) %>%
+  head() %>%
+  print()
+
+# Decision
+cat("Outliers retained for EDA to reflect market diversity (e.g., luxury cars, high-mileage vehicles).\n")
+```
+
+# 5.0 EDA
+
+##### Grouped Data Summary Group by Car_Brand
+
+```{r}
+# Summarize data by Car_Brand with price statistics
+grouped_Car_Brand <- Used_cars %>%
+  group_by(Car_Brand) %>%  # Group by car brand
+  summarize(Average_Price = round(mean(Price_in_GBP)),  # Calculate mean price
+            Median_Price = round(median(Price_in_GBP)),  # Calculate median price
+            Min_Price = min(Price_in_GBP),        # Calculate minimum price
+            Max_Price = max(Price_in_GBP),        # Calculate maximum price
+            Count = n()) %>%                      # Count number of cars per brand
+  arrange(desc(Count))  # Sort by count in descending order
+print(grouped_Car_Brand)  # Display the summary
+```
+
+##### Group by Fuel
+
+```{r}
+# Summarize data by Fuel type with price statistics
+grouped_Fuel <- Used_cars %>%
+  group_by(Fuel) %>%  # Group by fuel type
+  summarize(Average_Price = round(mean(Price_in_GBP)),  # Calculate mean price
+            Median_Price = round(median(Price_in_GBP)),  # Calculate median price
+            Min_Price = min(Price_in_GBP),        # Calculate minimum price
+            Max_Price = max(Price_in_GBP),        # Calculate maximum price
+            Count = n()) %>%                      # Count number of cars per fuel type
+  arrange(desc(Count))  # Sort by count in descending order
+print(grouped_Fuel)  # Display the summary
+```
+
+##### Group by Transmission
+
+```{r}
+# Summarize data by Transmission type with price statistics
+grouped_Transmission <- Used_cars %>%
+  group_by(Transmission) %>%  # Group by transmission type
+  summarize(Average_Price = round(mean(Price_in_GBP)),  # Calculate mean price
+            Median_Price = round(median(Price_in_GBP)),  # Calculate median price
+            Min_Price = min(Price_in_GBP),        # Calculate minimum price
+            Max_Price = max(Price_in_GBP),        # Calculate maximum price
+            Count = n()) %>%                      # Count number of cars per transmission
+  arrange(desc(Count))  # Sort by count in descending order
+print(grouped_Transmission)  # Display the summary
+```
+
+##### Group by Car_Type
+
+```{r}
+# Summarize data by Car_Type with price statistics
+grouped_Car_Type <- Used_cars %>%
+  group_by(Car_Type) %>%  # Group by car type
+  summarize(Average_Price = round(mean(Price_in_GBP)),  # Calculate mean price
+            Median_Price = round(median(Price_in_GBP)),  # Calculate median price
+            Min_Price = min(Price_in_GBP),        # Calculate minimum price
+            Max_Price = max(Price_in_GBP),        # Calculate maximum price
+            Count = n()) %>%                      # Count number of cars per car type
+  arrange(desc(Count))  # Sort by count in descending order
+print(grouped_Car_Type)  # Display the summary
+```
+
+## 5.1 Function to Calculate summary statistics
+
+```{r}
+# Calculate summary statistics for Price_in_GBP
+price_summary <- Used_cars %>%
+  summarise(
+    Mean = mean(`Price_in_GBP`, na.rm = TRUE),      # Calculate mean price
+    Median = median(`Price_in_GBP`, na.rm = TRUE),  # Calculate median price
+    SD = sd(`Price_in_GBP`, na.rm = TRUE),          # Calculate standard deviation
+    Min = min(`Price_in_GBP`, na.rm = TRUE),        # Calculate minimum price
+    Q1 = quantile(`Price_in_GBP`, 0.25, na.rm = TRUE),  # Calculate first quartile
+    Q3 = quantile(`Price_in_GBP`, 0.75, na.rm = TRUE),  # Calculate third quartile
+    Max = max(`Price_in_GBP`, na.rm = TRUE)         # Calculate maximum price
+  )
+print(price_summary)  # Display the summary statistics
+```
+
+## 5.2 Creating visualizations using Histogram for Price
+
+```{r}
+# Create a histogram to visualize the distribution of car prices
+ggplot(Used_cars, aes(x = `Price_in_GBP`)) +
+  geom_histogram(binwidth = 5000, fill = "blue", color = "black") +  # Plot histogram with 5000 GBP bins
+  labs(title = "Price Distribution", x = "Price (£)", y = "Frequency")  # Add titles and labels
+```
+
+## 5.3 Box Plot for Price
+
+```{r}
+
+# Create box plots to visualize the spread and outliers of car prices, mileages and engine size
+Used_cars %>%
+  pivot_longer(cols = c(Price_in_GBP, Mileage_in_miles, Engine_Size_in_cc),
+               names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(y = Value)) +
+  geom_boxplot(fill = "lightblue", color = "darkblue") +  # Plot box plot with custom colors
+  facet_wrap(~Variable, scales = "free_y") +
+  labs(title = "Box Plots for Numeric Variables", y = "Value") # Add title and y-axis label
+```
+
+## 5.4 Function to generate a scatterplot with trend line
+
+```{r}
+# Function to create a scatter plot with a trend line for two variables
+scatter_plot <- function(Used_cars, x_var, y_var) {
+  Used_cars %>%
+    ggplot(aes_string(x = x_var, y = y_var)) +  # Use aes_string for dynamic column names
+    geom_point(color = "blue", alpha = 0.05) +   # Plot points with transparency
+    geom_smooth(method = "lm", se = FALSE, color = "red") +  # Add linear trend line without confidence interval
+    labs(title = paste("Scatterplot of", y_var, "vs", x_var),  # Dynamic title
+         x = x_var, y = y_var) +                       # Axis labels
+    theme_minimal()  # Use minimal theme
+}
+
+# Generate scatter plots for key relationships
+Used_cars %>% scatter_plot("Mileage_in_miles", "Price_in_GBP")  # Mileage vs Price
+Used_cars %>% scatter_plot("Year", "Price_in_GBP")             # Year vs Price
+Used_cars %>% scatter_plot("Year", "Mileage_in_miles")         # Year vs Mileage
+Used_cars %>% scatter_plot("Engine_Size_in_cc", "Price_in_GBP")  # Engine Size vs Price
+
+
+```
+
+### 5.5 Function to generate a correlation heatmap for numeric variables in a data frame
+
+```{r}
+
+# Function to create a correlation heatmap for numeric variables
+correlation_heatmap <- function(data) {
+    # Calculate the correlation matrix (using complete observations) and Select only numeric columns
+  corr_matrix <- cor(select_if(data, is.numeric), use = "complete.obs")
+    # Convert the correlation matrix to long format for ggplot2 and create the heatmap using ggplot2
+  ggplot(reshape2::melt(corr_matrix), aes(x = Var1, y = Var2, fill = value)) +
+    geom_tile() + # Plot tiles for each correlation value
+    scale_fill_gradient2(low = "blue", high = "red", mid = "white",  # Color gradient from -1 to 1
+                         midpoint = 0, limit = c(-1, 1)) +
+    labs(title = "Correlation Heatmap", x = "", y = "") +  # Add title, remove axis labels
+    theme_minimal() + # Use minimal theme
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) # Rotate x-axis labels
+}
+
+# Generate the correlation heatmap for the main data frame
+correlation_heatmap(Used_cars)
+
+```

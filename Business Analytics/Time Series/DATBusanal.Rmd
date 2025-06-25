@@ -1,0 +1,1261 @@
+---
+title: "DAT7304 Part1"
+author: "Udochukwu Okike 2423983"
+date: "2025-05-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Configure knitr to display code in the output document
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Segment 1: Loading, Exploring and Preparing the Dataset
+
+## Step 1: Load Packages & Initialise Environment
+
+```{r packages}
+# Clear R environment to ensure a clean workspace
+rm(list = ls())
+# Perform garbage collection to free memory
+gc()
+
+# List of required packages for data processing, visualization, and modeling
+packages <- c("tidyverse", "readxl", "lubridate", "janitor", "zoo", "ggplot2", "keras", "randomForest", 
+              "forecast", "tseries", "urca", "corrplot", "caret", "Metrics", "gt", "lmtest", "reshape2",
+              "e1071", "keras", "tensorflow", "TTR", "scales", "kableExtra", "tibble", "patchwork")
+
+# Function to load or install packages as needed
+load_packages <- function(pkg_list) {
+  for (pkg in pkg_list) {
+    if (!require(pkg, character.only = TRUE)) {
+      # Install package with dependencies if not already installed
+      install.packages(pkg, dependencies = TRUE)
+      # Load the package
+      library(pkg, character.only = TRUE)
+    }
+  }
+}
+
+# Execute package loading function
+load_packages(packages)
+```
+
+## Step 2: Load and Clean Dataset
+
+```{r load-clean-data}
+# Load fuel price dataset from Excel, skipping metadata rows
+fuel_data <- read_excel("fuel_price.xlsx", sheet = "Table 1 Weekly", skip = 5)
+
+# Assign column names for clarity
+colnames(fuel_data) <- c("Week_Ending", "Avg_Fuel_Price", "Quantity_Per_Transaction", "Fuel_Sales_Index")
+
+# Convert Week_Ending to Date format, ensure Avg_Fuel_Price is numeric, and select relevant columns
+fuel_data <- fuel_data %>%
+  mutate(Week_Ending = as.Date(Week_Ending),
+         Avg_Fuel_Price = as.numeric(Avg_Fuel_Price)) %>%
+  select(Date = Week_Ending, avg_price = Avg_Fuel_Price)
+
+# Display dataset structure to verify data types and format
+glimpse(fuel_data)
+# Summarize dataset to check for basic statistics and potential issues
+summary(fuel_data)
+```
+
+## Step 3: Identify & Handle Missing Values
+
+```{r missing-values}
+# Identify the row index of missing values in avg_price column
+print(paste("There is a missing value in row: ", which(is.na(fuel_data$avg_price))))
+```
+
+```{r impute-missing}
+# Impute missing values in avg_price using linear interpolation
+fuel_data$avg_price <- zoo::na.approx(fuel_data$avg_price, na.rm = FALSE)
+
+# Verify that no missing values remain in avg_price
+print(paste("The sum of missing value(s): ", sum(is.na(fuel_data$avg_price))))
+```
+
+## Step 4: Detect & Handle Outliers
+
+```{r boxplot-outliers}
+# Create a boxplot to visualize potential outliers in avg_price
+fuel_data %>%
+  ggplot(aes(y = avg_price)) +
+  geom_boxplot(fill = "orange", alpha = 0.9, outlier.color = "red") +
+  labs(title = "Boxplot of Weekly Average Fuel Prices",
+       y = "Fuel Price (Pence per Litre)",
+       x = "") +
+  theme_minimal()
+```
+
+```{r detect-outliers}
+# Calculate Interquartile Range (IQR) to identify outliers
+Q1 <- quantile(fuel_data$avg_price, 0.25, na.rm = TRUE)
+Q3 <- quantile(fuel_data$avg_price, 0.75, na.rm = TRUE)
+IQR_val <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR_val
+upper_bound <- Q3 + 1.5 * IQR_val
+
+# Identify indices of outliers in avg_price
+outlier_idx <- which(fuel_data$avg_price < lower_bound | fuel_data$avg_price > upper_bound)
+
+# Display rows with outliers for inspection
+fuel_data[outlier_idx, ]
+```
+
+```{r compare-outlier-fixes}
+# Apply winsorisation to cap outliers at IQR bounds
+fuel_data$winsorised <- fuel_data$avg_price
+fuel_data$winsorised[outlier_idx] <- ifelse(
+  fuel_data$winsorised[outlier_idx] > upper_bound, upper_bound, lower_bound
+)
+
+# Display original and winsorised values for outlier rows
+fuel_data[outlier_idx, c("Date", "avg_price", "winsorised")]
+
+# Apply interpolation to replace outliers with interpolated values
+fuel_data$interpolated <- fuel_data$avg_price
+fuel_data$interpolated[outlier_idx] <- NA
+fuel_data$interpolated <- zoo::na.approx(fuel_data$interpolated, na.rm = FALSE)
+
+# Compare original, winsorised, and interpolated values for outliers
+fuel_data[outlier_idx, c("Date", "avg_price", "winsorised", "interpolated")]
+```
+
+```{r apply-outlier-fix}
+# Replace avg_price with interpolated values to handle outliers
+fuel_data <- fuel_data %>%
+  select(Date, avg_price = interpolated)
+```
+
+# Segment 2: Decomposition, Stationarity Testing, and Transformation.
+
+## Step 1: Create Weekly Time Series Object
+
+```{r create-ts}
+# Select relevant columns and remove any rows with missing values
+fuel_data_ts <- fuel_data %>% select(Date, avg_price) %>% drop_na()
+
+# Extract start year and week for time series creation
+start_year <- lubridate::year(min(fuel_data_ts$Date))
+start_week <- lubridate::isoweek(min(fuel_data_ts$Date))
+
+# Convert avg_price to a weekly time series object with 52 periods per year
+ts_fuel <- ts(fuel_data_ts$avg_price,
+              start = c(start_year, start_week),
+              frequency = 52)
+```
+
+## Step 2: STL Decomposition
+
+```{r stl-decomposition}
+# Perform STL decomposition to separate trend, seasonal, and remainder components
+decomposed_fuel <- stl(ts_fuel, s.window = "periodic")
+
+# Plot decomposed components for visual analysis
+autoplot(decomposed_fuel) +
+  ggtitle("STL Decomposition of Weekly Fuel Price Series") +
+  theme_minimal()
+```
+
+## Step 3: ADF Test
+
+```{r adf-test}
+# Conduct Augmented Dickey-Fuller test to check for stationarity
+adf_result <- tseries::adf.test(ts_fuel)
+# Display test results
+print(adf_result)
+```
+
+## Step 4: KPSS Test
+
+```{r kpss-test}
+# Perform KPSS test to further assess stationarity
+kpss_result <- urca::ur.kpss(ts_fuel, type = "tau")
+# Display detailed test summary
+summary(kpss_result)
+```
+
+## Step 5: Apply Differencing
+
+```{r differencing}
+# Apply first-order differencing to make the series stationary
+diff_fuel <- diff(ts_fuel)
+
+# Plot differenced series to inspect stationarity
+autoplot(diff_fuel) +
+  ggtitle("First-Order Differenced Fuel Price Series") +
+  xlab("Time (Weeks)") +
+  ylab("Differenced Fuel Price") +
+  theme_minimal()
+```
+
+## Step 6: ADF Test on Differenced Series
+
+```{r adf-after-diff}
+# Conduct ADF test on differenced series to confirm stationarity
+adf_diff_result <- tseries::adf.test(diff_fuel)
+# Display test results
+print(adf_diff_result)
+```
+
+## Step 7: ACF & PACF Analysis
+
+```{r acf-pacf}
+# Set up plot layout for side-by-side ACF and PACF plots
+par(mfrow = c(1, 2))
+# Plot Autocorrelation Function (ACF) to identify lag patterns
+acf(diff_fuel, main = "ACF of Differenced Series")
+# Plot Partial Autocorrelation Function (PACF) for model order selection
+pacf(diff_fuel, main = "PACF of Differenced Series")
+# Reset plot layout
+par(mfrow = c(1, 1))
+```
+
+## Step 8: Log Transformation & Smoothing
+
+```{r log-transform}
+# Apply log transformation to stabilise variance
+log_price <- log(ts_fuel)
+# Smooth log-transformed series using a moving average filter
+smoothed_log <- stats::filter(log_price, filter = rep(1/4, 4), sides = 2)
+
+# Plot smoothed log-transformed series for visualisation
+plot(smoothed_log, main = "Smoothed Log-Transformed Fuel Price", ylab = "Log Price", col = "blue")
+```
+
+# Segment 3: Train-Test Split and Univariate Forecasting
+
+## Step 1: Create Train-Test Split (80:20)
+
+```{r split-data}
+# Define time series with weekly frequency using full dataset
+ts_fuel <- ts(fuel_data$avg_price, frequency = 52, start = c(year(min(fuel_data$Date)), isoweek(min(fuel_data$Date))))
+
+# Calculate index for 80/20 train-test split
+n_obs <- length(ts_fuel)
+split_index <- floor(0.8 * n_obs)
+
+# Create training and test time series
+train_ts <- ts(ts_fuel[1:split_index], start = start(ts_fuel), frequency = 52)
+test_ts <- ts(ts_fuel[(split_index + 1):n_obs], start = time(ts_fuel)[split_index + 1], frequency = 52)
+```
+
+## Step 2: Visualise Train vs Test Split
+
+```{r plot-train-test}
+# Plot training and test sets to visualise the split
+ts.plot(train_ts, test_ts,
+        col = c("skyblue", "red"),
+        lty = 1:2, lwd = 2,
+        main = "Train vs Test Split of Weekly Fuel Prices",
+        ylab = "Fuel Price", xlab = "Time")
+# Add legend to distinguish training and test sets
+legend("topleft", legend = c("Training Set", "Test Set"), col = c("skyblue", "red"), lty = 1:2, lwd = 2)
+```
+
+## Step 3: Fit Manual SARIMA Model
+
+```{r manual-sarima}
+# Fit a manually specified SARIMA model based on ACF/PACF analysis
+manual_sarima <- Arima(train_ts, order = c(1,1,1), seasonal = list(order = c(1,1,1), period = 52))
+# Display model summary
+summary(manual_sarima)
+```
+
+## Step 4: Fit Auto SARIMA Model
+
+```{r auto-sarima}
+# Fit an automatically selected SARIMA model using stepwise selection
+auto_sarima <- auto.arima(train_ts, seasonal = TRUE, stepwise = TRUE, approximation = FALSE)
+# Display model summary
+summary(auto_sarima)
+```
+
+## Step 5: Forecast & Visualise (Few weeks)
+
+```{r forecast-comparison}
+# Define forecast horizon equal to test set length
+h <- length(test_ts)
+# Generate forecasts for auto and manual SARIMA models
+auto_fc <- forecast(auto_sarima, h = h)
+manual_fc <- forecast(manual_sarima, h = h)
+
+# Plot auto SARIMA forecast with actual test data
+p1 <- autoplot(auto_fc) +
+  autolayer(test_ts, series = "Actual", color = "red") +
+  ggtitle("Auto SARIMA Forecast vs Actual") +
+  xlab("Time") + ylab("Fuel Price (Pence per Litre)") +
+  theme_minimal()
+
+# Plot manual SARIMA forecast with actual test data
+p2 <- autoplot(manual_fc) +
+  autolayer(test_ts, series = "Actual", color = "red") +
+  ggtitle("Manual SARIMA Forecast vs Actual") +
+  xlab("Time") + ylab("Fuel Price (Pence per Litre)") +
+  theme_minimal()
+
+# Display plots side by side for comparison
+p1 / p2
+```
+
+## Step 6: Compare Forecast Accuracy
+
+```{r accuracy-metrics}
+# Convert forecasts to time series aligned with test set
+manual_pred <- ts(as.numeric(manual_fc$mean), start = start(test_ts), frequency = frequency(test_ts))
+auto_pred   <- ts(as.numeric(auto_fc$mean), start = start(test_ts), frequency = frequency(test_ts))
+
+# Calculate accuracy metrics for manual and auto SARIMA forecasts
+manual_accuracy <- forecast::accuracy(manual_pred, test_ts)
+auto_accuracy   <- forecast::accuracy(auto_pred, test_ts)
+
+# Display accuracy metrics side by side for comparison
+rbind(
+  Manual_SARIMAX = manual_accuracy["Test set", ],
+  Auto_SARIMAX = auto_accuracy["Test set", ]
+)
+```
+
+# Segment 4: Internal Exogenous Multivariate Forecasting (ARIMAX)
+
+## Step 1: Load and Prepare Dataset for Multivariate Forecasting (Internal Variable)
+
+```{r load-full-dataset, message=FALSE, warning=FALSE}
+# Load raw fuel price dataset from Excel
+fuel_raw <- read_excel("fuel_price.xlsx", sheet = "Table 1 Weekly", skip = 5)
+
+# Rename columns for consistency and clarity
+colnames(fuel_raw) <- c("Week_Ending", "Avg_Fuel_Price", "Quantity_Per_Transaction", "Fuel_Sales_Index")
+
+# Inspect dataset structure and summary statistics
+str(fuel_raw)
+summary(fuel_raw)
+```
+
+## Step 2: Clean, Impute Missing values & Handle Outliers
+
+```{r clean-dataset}
+# Clean and preprocess dataset: convert to Date, ensure numeric columns, and select relevant variables
+fuel_clean <- fuel_raw %>%
+  mutate(
+    Date = as.Date(Week_Ending),
+    avg_price = as.numeric(Avg_Fuel_Price),
+    Quantity_Per_Transaction = as.numeric(gsub(",", "", Quantity_Per_Transaction))
+  ) %>%
+  select(Date, avg_price, Quantity_Per_Transaction) %>%
+  arrange(Date)
+
+# Impute missing values in avg_price and Quantity_Per_Transaction
+fuel_clean$avg_price <- zoo::na.approx(fuel_clean$avg_price)
+fuel_clean$Quantity_Per_Transaction <- zoo::na.approx(fuel_clean$Quantity_Per_Transaction)
+
+# Define function to handle outliers using IQR method and interpolation
+handle_outliers <- function(series) {
+  Q1 <- quantile(series, 0.25, na.rm = TRUE)
+  Q3 <- quantile(series, 0.75, na.rm = TRUE)
+  IQR_val <- Q3 - Q1
+  lower <- Q1 - 1.5 * IQR_val
+  upper <- Q3 + 1.5 * IQR_val
+  series[series < lower | series > upper] <- NA
+  zoo::na.approx(series)
+}
+
+# Apply outlier handling to avg_price and Quantity_Per_Transaction
+fuel_clean$avg_price <- handle_outliers(fuel_clean$avg_price)
+fuel_clean$Quantity_Per_Transaction <- handle_outliers(fuel_clean$Quantity_Per_Transaction)
+summary(fuel_clean)
+```
+
+## Step 3: Create and Explore Time Series
+
+```{r internal-ts-create}
+# Convert avg_price and Quantity_Per_Transaction to time series objects
+ts_y <- ts(fuel_clean$avg_price, frequency = 52, start = c(2021, 1))
+ts_x <- ts(fuel_clean$Quantity_Per_Transaction, frequency = 52, start = c(2021, 1))
+
+# Perform STL decomposition on fuel price series for trend and seasonality analysis
+autoplot(stl(ts_y, s.window = "periodic")) +
+  ggtitle("STL Decomposition of Fuel Prices") + theme_minimal()
+```
+
+## Step 4: Stationarity Tests
+
+```{r internal-stationarity-tests}
+# Conduct ADF test to check stationarity of fuel price series
+print(adf.test(ts_y))
+# Perform KPSS test to complement stationarity analysis
+kpss_result <- ur.kpss(ts_y, type = "tau")
+summary(kpss_result)
+```
+
+## Step 5: Differencing and ACF/PACF
+
+```{r internal-diff-acf-pacf}
+# Apply first-order differencing to fuel price and exogenous variable
+diff_y <- diff(ts_y)
+diff_x <- diff(ts_x)
+
+# Plot differenced fuel price series to inspect stationarity
+autoplot(diff_y) + ggtitle("Differenced Fuel Price") + theme_minimal()
+
+# Conduct ADF test on differenced series to confirm stationarity
+print(adf.test(diff_y))
+
+# Plot ACF and PACF for differenced series to guide ARIMA model selection
+par(mfrow = c(1, 2))
+acf(diff_y, main = "ACF of Differenced Series")
+pacf(diff_y, main = "PACF of Differenced Series")
+par(mfrow = c(1, 1))
+```
+
+## Step 6: Granger Causality Test
+
+```{r granger-internal}
+# Prepare differenced data for Granger causality test
+granger_df_internal <- na.omit(cbind(diff_y, diff_x))
+# Test if Quantity_Per_Transaction Granger-causes fuel price
+grangertest(diff_y ~ diff_x, order = 2, data = as.data.frame(granger_df_internal))
+```
+
+## Step 7: Train-Test Split
+
+```{r internal-train-test}
+# Calculate index for 80/20 train-test split
+n <- length(ts_y)
+split_idx <- floor(0.8 * n)
+# Create training and test sets for both dependent and exogenous variables
+train_y <- window(ts_y, end = time(ts_y)[split_idx])
+train_x <- window(ts_x, end = time(ts_x)[split_idx])
+test_y  <- window(ts_y, start = time(ts_y)[split_idx + 1])
+test_x  <- window(ts_x, start = time(ts_x)[split_idx + 1])
+```
+
+## Step 8: Fit SARIMAX Models (Manual and Auto)
+
+```{r internal-fit-models}
+# Fit manual SARIMAX model with specified orders and exogenous variable
+manual_sarimax <- Arima(train_y, order = c(1,1,1),
+                        seasonal = list(order = c(1,1,1), period = 52),
+                        xreg = train_x)
+# Fit auto SARIMAX model with automatic order selection
+auto_sarimax <- auto.arima(train_y, seasonal = TRUE, xreg = train_x)
+# Display summaries for both models
+summary(manual_sarimax)
+summary(auto_sarimax)
+```
+
+## Step 9: Forecast and Plot
+
+```{r internal-forecast-plot}
+# Define forecast horizon equal to test set length
+h <- length(test_y)
+
+# Generate forecast for manual SARIMAX model
+fc_manual <- forecast(manual_sarimax, xreg = test_x, h = h)
+
+# Generate forecast for auto SARIMAX model
+fc_auto <- forecast(auto_sarimax, xreg = test_x, h = h)
+
+# Create time series for actual test values
+ts_test_y <- ts(test_y, start = end(train_y) + c(0,1), frequency = 52)
+
+# Plot manual SARIMAX forecast with actual values
+p1 <- autoplot(fc_manual) +
+  autolayer(ts_test_y, series = "Actual", color = "red") +
+  ggtitle("Manual SARIMAX Forecast (Internal Variable)") +
+  xlab("Time") + ylab("Fuel Price") +
+  theme_minimal()
+
+# Plot auto SARIMAX forecast with actual values
+p2 <- autoplot(fc_auto) +
+  autolayer(ts_test_y, series = "Actual", color = "red") +
+  ggtitle("Auto SARIMAX Forecast (Internal Variable)") +
+  xlab("Time") + ylab("Fuel Price") +
+  theme_minimal()
+
+# Display plots side by side for comparison
+p1 / p2
+```
+
+## Step 10: Accuracy
+
+```{r internal-accuracy}
+# Convert forecasts to time series aligned with test set
+manual_pred <- ts(fc_manual$mean, start = start(test_y), frequency = frequency(test_y))
+auto_pred   <- ts(fc_auto$mean, start = start(test_y), frequency = frequency(test_y))
+
+# Calculate accuracy metrics for manual and auto SARIMAX models
+acc_manual <- forecast::accuracy(manual_pred, test_y)
+acc_auto   <- forecast::accuracy(auto_pred, test_y)
+
+# Display accuracy metrics side by side
+rbind(
+  Manual_SARIMAX = acc_manual["Test set", ],
+  Auto_SARIMAX = acc_auto["Test set", ]
+)
+```
+
+# Segment 5: External Multivariate Forecasting (SARIMAX with Brent Crude)
+
+## Step 1. Load and Prepare Brent Crude Dataset
+
+```{r load-brent, message=FALSE, warning=FALSE}
+# Load Brent crude price dataset from Excel, skipping metadata rows
+brent_raw <- read_excel("PET_PRI_SPT_S1_W-2.xlsx", sheet = "Data 1", skip = 2)
+
+# Select and rename relevant columns for analysis
+brent_data <- brent_raw %>%
+  dplyr::select(Date = 1, Brent_Price = 3) %>%  # Column 3 is Europe Brent Spot Price
+  mutate(
+    Date = as.Date(Date),
+    Brent_Price = as.numeric(Brent_Price)
+  ) %>%
+  drop_na() %>%
+  arrange(Date)
+
+# Check for missing values in Brent dataset
+sum(is.na(brent_data))
+```
+
+```{r handle-brent-NA-outliers}
+# Interpolate any missing values in Brent_Price
+brent_data$Brent_Price <- zoo::na.approx(brent_data$Brent_Price)
+
+# Identify and handle outliers in Brent_Price using IQR method
+Q1 <- quantile(brent_data$Brent_Price, 0.25)
+Q3 <- quantile(brent_data$Brent_Price, 0.75)
+IQR_val <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR_val
+upper_bound <- Q3 + 1.5 * IQR_val
+
+# Replace outliers with NA and interpolate
+brent_data$Brent_Price <- ifelse(
+  brent_data$Brent_Price < lower_bound | brent_data$Brent_Price > upper_bound,
+  NA,
+  brent_data$Brent_Price
+)
+brent_data$Brent_Price <- zoo::na.approx(brent_data$Brent_Price)
+```
+
+## Step 2. Visualise Cleaned Brent Crude Time Series
+
+```{r plot-brent-ts}
+# Plot Brent crude price time series to inspect trends
+ggplot(brent_data, aes(x = Date, y = Brent_Price)) +
+  geom_line(color = "#2C3E50") +
+  labs(title = "Weekly Europe Brent Crude Spot Price (FOB)",
+       x = "Date", y = "Price (USD per Barrel)") +
+  theme_minimal()
+```
+
+## Step 3. Merge Brent Data with Cleaned Fuel Dataset
+
+```{r merge-brent-fuel}
+# Align fuel and Brent datasets by week
+fuel_clean <- fuel_clean %>% mutate(Week = floor_date(Date, unit = "week"))
+brent_data <- brent_data %>% mutate(Week = floor_date(Date, unit = "week"))
+
+# Merge datasets on week, keeping only complete cases
+external_merged <- fuel_clean %>%
+  left_join(brent_data, by = "Week") %>%
+  select(Date = Week, avg_price, Brent_Price) %>%
+  drop_na()
+head(external_merged)
+```
+
+## Step 4. Decomposition & Stationarity Tests for Multivariate Forecasting
+
+```{r decomposition-stationarity-external}
+# Convert fuel price to time series for analysis
+ts_y <- ts(external_merged$avg_price, frequency = 52, start = c(2021, 1))
+
+# Perform STL decomposition to analyse trend and seasonality
+stl_decomp <- stl(ts_y, s.window = "periodic")
+autoplot(stl_decomp) +
+  ggtitle("STL Decomposition of Average Fuel Price (External Model)") +
+  theme_minimal()
+
+# Conduct ADF and KPSS tests to assess stationarity
+adf_test <- adf.test(ts_y)
+kpss_test <- ur.kpss(ts_y, type = "tau")
+adf_test
+summary(kpss_test)
+
+# Apply first-order differencing to achieve stationarity
+diff_y <- diff(ts_y)
+autoplot(diff_y) + ggtitle("Differenced Fuel Price Series (External Model)") + theme_minimal()
+
+# Plot ACF and PACF for differenced series to guide model selection
+par(mfrow = c(1,2))
+acf(diff_y, main = "ACF - Differenced Fuel Price")
+pacf(diff_y, main = "PACF - Differenced Fuel Price")
+par(mfrow = c(1,1))
+```
+
+## Step 5. Granger Causality Test
+
+```{r granger-external}
+# Convert Brent price to time series and difference it
+ts_x <- ts(external_merged$Brent_Price, frequency = 52, start = c(2021, 1))
+diff_x <- diff(ts_x)
+# Prepare data for Granger causality test
+granger_df_external <- na.omit(cbind(diff_y, diff_x))
+# Test if Brent price Granger-causes fuel price
+grangertest(diff_y ~ diff_x, order = 2, data = as.data.frame(granger_df_external))
+```
+
+## Step 6. Train/Test Split & Model Fitting
+
+```{r fit-sarimax-brent-models}
+# Calculate index for 80/20 train-test split
+n <- length(ts_y)
+split_idx <- floor(0.8 * n)
+
+# Create training and test sets for dependent and exogenous variables
+train_y <- window(ts_y, end = time(ts_y)[split_idx])
+train_x <- window(ts_x, end = time(ts_x)[split_idx])
+test_y <- window(ts_y, start = time(ts_y)[split_idx + 1])
+test_x <- window(ts_x, start = time(ts_x)[split_idx + 1])
+
+# Fit manual SARIMAX model with Brent price as exogenous variable
+manual_sarimax_brent <- Arima(train_y,
+                              order = c(1,1,1),
+                              seasonal = list(order = c(1,1,1), period = 52),
+                              xreg = train_x)
+
+# Fit auto SARIMAX model with automatic order selection
+auto_sarimax_brent <- auto.arima(train_y, seasonal = TRUE, xreg = train_x)
+
+# Display model summaries
+summary(manual_sarimax_brent)
+summary(auto_sarimax_brent)
+```
+
+## Step 7. Forecast and Plot
+
+```{r forecast-brent-compare}
+# Define forecast horizon equal to test set length
+h <- length(test_y)
+# Generate forecasts for manual and auto SARIMAX models
+forecast_manual <- forecast(manual_sarimax_brent, xreg = test_x, h = h)
+forecast_auto <- forecast(auto_sarimax_brent, xreg = test_x, h = h)
+
+# Create time series for actual test values
+ts_test_y <- ts(test_y, start = end(train_y) + c(0, 1), frequency = 52)
+
+# Plot forecasts with actual values for comparison
+autoplot(ts_test_y, series = "Actual") +
+  autolayer(forecast_manual$mean, series = "Manual SARIMAX", color = "blue") +
+  autolayer(forecast_auto$mean, series = "Auto SARIMAX", color = "green") +
+  ggtitle("Forecast Comparison: Manual vs Auto SARIMAX (Brent)") +
+  theme_minimal()
+```
+
+## Step 8. Forecast Accuracy
+
+```{r accuracy-brent-models}
+# Convert forecasts to time series aligned with test set
+manual_pred <- ts(forecast_manual$mean, start = start(ts_test_y), frequency = 52)
+auto_pred <- ts(forecast_auto$mean, start = start(ts_test_y), frequency = 52)
+actual <- ts(as.numeric(test_y), start = start(ts_test_y), frequency = 52)
+
+# Calculate accuracy metrics for manual and auto SARIMAX models
+manual_acc <- forecast::accuracy(manual_pred, actual)
+auto_acc <- forecast::accuracy(auto_pred, actual)
+
+# Display accuracy metrics side by side
+rbind(
+  Manual_SARIMAX = manual_acc["Test set", ],
+  Auto_SARIMAX = auto_acc["Test set", ]
+)
+```
+
+# Segment 6: Comparison And Forecasting With Best ARIMA Model And Exogenous Variable
+
+## Step 1. Compare SARIMA vs SARIMAX (Internal) vs SARIMAX (Brent)
+
+```{r model-compare-table, results='asis'}
+# Reconstruct aligned forecast time series for each model
+ts_sarima <- ts(manual_fc$mean, start = start(test_ts), frequency = frequency(test_ts)) # Manual Arima
+ts_internal <- ts(fc_manual$mean, start = start(test_y), frequency = frequency(test_y)) # Manual Arima
+ts_brent <- ts(forecast_auto$mean, start = start(test_y), frequency = frequency(test_y)) # Auto Arima
+
+# Reconstruct aligned actual time series
+ts_actual_sarima <- test_ts
+ts_actual_internal <- test_y
+ts_actual_brent <- test_y  # Same as internal
+
+# Compute accuracy metrics for each model
+sarima_metrics <- data.frame(
+  RMSE = round(rmse(ts_actual_sarima, ts_sarima), 2),
+  MAE = round(mae(ts_actual_sarima, ts_sarima), 2),
+  MAPE = round(mape(ts_actual_sarima, ts_sarima) * 100, 2)
+)
+
+internal_metrics <- data.frame(
+  RMSE = round(rmse(ts_actual_internal, ts_internal), 2),
+  MAE = round(mae(ts_actual_internal, ts_internal), 2),
+  MAPE = round(mape(ts_actual_internal, ts_internal) * 100, 2)
+)
+
+brent_metrics <- data.frame(
+  RMSE = round(rmse(ts_actual_brent, ts_brent), 2),
+  MAE = round(mae(ts_actual_brent, ts_brent), 2),
+  MAPE = round(mape(ts_actual_brent, ts_brent) * 100, 2)
+)
+
+# Combine into a single table
+model_perf <- rbind(
+  "Univariate SARIMA" = sarima_metrics,
+  "SARIMAX (Internal)" = internal_metrics,
+  "SARIMAX (Brent)" = brent_metrics
+)
+
+# Display the performance comparison table
+print(model_perf)
+```
+
+## Step 2. Visualise Model Comparison
+
+```{r Model-compare-plot}
+# Extract MAPE values only
+mape_df <- data.frame(
+  Model = rownames(model_perf),
+  MAPE = model_perf$MAPE
+)
+
+# Create histogram comparing MAPE
+ggplot(mape_df, aes(x = reorder(Model, MAPE), y = MAPE, fill = Model)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_text(aes(label = MAPE), vjust = -0.5, size = 4) +
+  scale_fill_manual(values = c(
+    "Univariate SARIMA" = "grey40",
+    "SARIMAX (Internal)" = "steelblue",
+    "SARIMAX (Brent)" = "darkgreen"
+  )) +
+  labs(title = "MAPE Comparison Across Forecasting Models",
+       x = "Model", y = "Mean Absolute Percentage Error (%)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+# Segment 7: Future Forecasting (15 Weeks Ahead)
+
+## Step 1. Refit Best Model on Full Dataset
+
+```{r refit-models-full}
+# Create full fuel price time series
+ts_full <- ts(fuel_clean$avg_price, frequency = 52, start = c(2021, 1))
+
+# Extract full Brent Crude series as exogenous regressor
+xreg_external_full <- external_merged$Brent_Price
+
+# Fit SARIMAX (Brent) using auto.arima on full dataset
+model_sarimax_best <- auto.arima(ts_full, xreg = xreg_external_full, seasonal = TRUE)
+```
+
+## Step 2. Forecast 15 Weeks Ahead
+
+```{r forecast-15weeks}
+# Set 15-week forecast horizon
+h_future <- 15
+
+# Replicate last Brent price for next 15 weeks (assumption: constant exogenous input)
+future_xreg <- rep(tail(xreg_external_full, 1), h_future)
+
+# Generate forecast
+forecast_best <- forecast(model_sarimax_best, xreg = future_xreg, h = h_future)
+```
+
+## Step 3. Plot Future Forecasts
+
+```{r plot-15week-forecast}
+# Plot historical data with future forecast
+autoplot(ts_full, series = "Historical") +
+  autolayer(forecast_best$mean, series = "15-Week Forecast", color = "darkgreen") +
+  ggtitle("15-Week Ahead Forecast – SARIMAX (Brent)") +
+  xlab("Time (Weeks)") +
+  ylab("Fuel Price (Pence per Litre)") +
+  scale_colour_manual(name = "Series", values = c("Historical" = "grey70", "15-Week Forecast" = "darkgreen")) +
+  theme_minimal()
+```
+
+## Step 4. Preview Forecasted Values
+
+```{r show-forecast-table}
+# Create table of future dates and predicted prices
+future_forecast_df <- data.frame(
+  Week = seq(max(fuel_clean$Date) + 7, by = 7, length.out = h_future),
+  Forecast_Price = round(forecast_best$mean, 2)
+)
+
+# Display table
+knitr::kable(future_forecast_df, caption = "10-Week Ahead Forecast – SARIMAX (Brent)")
+```
+
+# Segment 8: Random Forest Forecasting
+
+## Step 1: Prepare Data, Lag Features & Train-Test Split
+
+```{r prepare-data-rf}
+# Create lagged features for Random Forest model
+fuel_rf <- fuel_clean %>%
+  mutate(
+    lag_1 = lag(avg_price, 1),
+    lag_2 = lag(avg_price, 2),
+    lag_3 = lag(avg_price, 3)
+  ) %>%
+  drop_na()
+
+# Perform 80/20 train-test split
+split_idx <- floor(0.8 * nrow(fuel_rf))
+train_rf <- fuel_rf[1:split_idx, ]
+test_rf  <- fuel_rf[(split_idx + 1):nrow(fuel_rf), ]
+
+# Define predictors (lagged features) and target variable
+x_train <- train_rf[, c("lag_1", "lag_2", "lag_3")]
+y_train <- train_rf$avg_price
+
+x_test <- test_rf[, c("lag_1", "lag_2", "lag_3")]
+y_test <- test_rf$avg_price
+```
+
+## Step 2: Fit and Evaluate Models with Different ntree & Compute Metrics
+
+```{r fit-rf-model}
+# Initialize dataframe to store results
+rf_results <- data.frame()
+
+# Fit Random Forest models with varying number of trees
+for (trees in c(100, 400, 700)) {
+  set.seed(42)  # Ensure reproducibility
+  rf_model <- randomForest(x = x_train, y = y_train, ntree = trees)
+  preds <- predict(rf_model, x_test)
+  
+  # Calculate accuracy metrics
+  rmse_val <- sqrt(mean((preds - y_test)^2))
+  mae_val  <- mean(abs(preds - y_test))
+  mape_val <- mean(abs((preds - y_test) / y_test)) * 100
+  
+  # Store results
+  rf_results <- rbind(rf_results, data.frame(
+    Model = paste("Random Forest (ntree =", trees, ")"),
+    RMSE = round(rmse_val, 4),
+    MAE  = round(mae_val, 4),
+    MAPE = round(mape_val, 4)
+  ))
+}
+
+# Display formatted table of Random Forest accuracy metrics
+knitr::kable(rf_results, caption = "Random Forest Forecast Accuracy for Varying ntree") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## Step 3: Plot Best Model’s Predictions
+
+```{r predict-rf}
+# Fit Random Forest model with best ntree (700)
+set.seed(42)
+rf_best <- randomForest(x = x_train, y = y_train, ntree = 700)
+rf_pred_best <- predict(rf_best, x_test)
+
+# Prepare data for plotting
+plot_df <- data.frame(
+  Week = 1:length(y_test),
+  Actual = y_test,
+  Predicted = rf_pred_best
+)
+
+# Plot actual vs predicted values for best Random Forest model
+ggplot(plot_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, colour = "Actual")) +
+  geom_line(aes(y = Predicted, colour = "Predicted"), linetype = "dashed") +
+  scale_colour_manual(values = c("Actual" = "red", "Predicted" = "blue")) +
+  labs(title = "Random Forest (ntree = 700): Actual vs Predicted",
+       y = "Fuel Price (Pence per Litre)", x = "Week") +
+  theme_minimal()
+```
+
+# Segment 9: LSTM Forecasting
+
+## Step 1: Prepare
+
+```{r prepare-lstm-data}
+# Select relevant columns for LSTM model
+fuel_lstm <- fuel_data %>% select(Date, avg_price)
+# Normalise avg_price to [0,1] for better LSTM training
+min_price <- min(fuel_lstm$avg_price)
+max_price <- max(fuel_lstm$avg_price)
+fuel_lstm$norm_price <- (fuel_lstm$avg_price - min_price) / (max_price - min_price)
+
+# Function to create supervised learning dataset with lagged features
+create_supervised <- function(series, lag = 3) {
+  x <- NULL; y <- NULL
+  for (i in 1:(length(series) - lag)) {
+    x <- rbind(x, series[i:(i + lag - 1)])
+    y <- c(y, series[i + lag])
+  }
+  list(x = x, y = y)
+}
+
+# Create supervised dataset with 3 lags
+supervised <- create_supervised(fuel_lstm$norm_price)
+# Perform 80/20 train-test split
+split_index <- floor(0.8 * nrow(supervised$x))
+train_x <- supervised$x[1:split_index, ]
+train_y <- supervised$y[1:split_index]
+test_x <- supervised$x[(split_index + 1):nrow(supervised$x), ]
+test_y <- supervised$y[(split_index + 1):length(supervised$y)]
+
+# Reshape data for LSTM input (samples, timesteps, features)
+train_x <- array(train_x, dim = c(nrow(train_x), ncol(train_x), 1))
+test_x <- array(test_x, dim = c(nrow(test_x), ncol(test_x), 1))
+```
+
+## Step 2: Fit LSTM
+
+```{r fit-lstm}
+# Define sequential LSTM model with one LSTM layer and one dense layer
+model_lstm <- keras_model_sequential() %>%
+  layer_lstm(units = 50, input_shape = c(dim(train_x)[2], 1)) %>%
+  layer_dense(units = 1)
+
+# Compile model with mean squared error loss and Adam optimizer
+model_lstm %>% compile(loss = "mse", optimizer = "adam")
+# Train model with validation split
+history <- model_lstm %>% fit(
+  x = train_x, y = train_y, epochs = 50, batch_size = 8,
+  validation_split = 0.1, verbose = 0
+)
+```
+
+## Step 3: Predict
+
+```{r forecast-lstm}
+# Generate predictions on test set
+predicted <- model_lstm %>% predict(test_x)
+# Denormalise predictions to original scale
+predicted <- predicted * (max_price - min_price) + min_price
+# Denormalise actual test values
+test_y_actual <- test_y * (max_price - min_price) + min_price
+```
+
+## Step 4: Accuracy
+
+```{r evaluate-lstm}
+# Calculate accuracy metrics for LSTM predictions
+lstm_metrics <- data.frame(
+  RMSE = round(rmse(test_y_actual, predicted), 3),
+  MAE = round(mae(test_y_actual, predicted), 3),
+  MAPE = round(mape(test_y_actual, predicted) * 100, 2)
+)
+# Display metrics
+lstm_metrics
+```
+
+## Step 5: Plot
+
+```{r plot-lstm-vs-actual}
+# Prepare data for plotting
+plot_df <- data.frame(Week = 1:length(test_y_actual), Actual = test_y_actual, Predicted = predicted)
+
+# Plot actual vs predicted values for LSTM model
+ggplot(plot_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, colour = "Actual")) +
+  geom_line(aes(y = Predicted, colour = "Predicted")) +
+  scale_colour_manual(values = c("Actual" = "red", "Predicted" = "blue")) +
+  labs(title = "LSTM Forecast vs Actual", y = "Fuel Price", x = "Week") +
+  theme_minimal()
+```
+
+# Segment 10: SVR Forecasting
+
+## Step 1: Prepare
+
+```{r svr-data-prep}
+# Create lagged features for SVR model
+fuel_data <- fuel_data %>%
+  mutate(
+    lag_1 = lag(avg_price, 1),
+    lag_2 = lag(avg_price, 2),
+    lag_3 = lag(avg_price, 3)
+  ) %>% drop_na()
+# Select relevant columns
+data_svr <- fuel_data %>% drop_na() %>% select(avg_price, lag_1, lag_2, lag_3)
+# Perform 80/20 train-test split
+split_index <- floor(0.8 * nrow(data_svr))
+train_data <- data_svr[1:split_index, ]
+test_data <- data_svr[(split_index + 1):nrow(data_svr), ]
+# Center and scale training and test data
+preproc <- preProcess(train_data, method = c("center", "scale"))
+train_scaled <- predict(preproc, train_data)
+test_scaled <- predict(preproc, test_data)
+# Define predictors and target
+X_train <- train_scaled %>% select(-avg_price)
+y_train <- train_scaled$avg_price
+X_test <- test_scaled %>% select(-avg_price)
+y_test <- test_scaled$avg_price
+```
+
+## Step 2: SVR Training and Evaluation for Multiple Kernels
+
+```{r svr-train}
+# Define kernel types to test
+kernels <- c("linear", "polynomial", "radial")
+svr_results <- data.frame()
+
+# Train and evaluate SVR models for each kernel
+for (k in kernels) {
+  # Train SVR model
+  svr_model <- svm(x = X_train, y = y_train, kernel = k)
+  svr_preds_scaled <- predict(svr_model, X_test)
+  
+  # Inverse scale predictions and actual values
+  avg_mean <- preproc$mean["avg_price"]
+  avg_sd   <- preproc$std["avg_price"]
+  
+  final_preds <- svr_preds_scaled * avg_sd + avg_mean
+  actual_vals <- y_test * avg_sd + avg_mean
+  
+  # Calculate accuracy metrics
+  rmse_val <- RMSE(final_preds, actual_vals)
+  mae_val  <- MAE(final_preds, actual_vals)
+  mape_val <- mean(abs((final_preds - actual_vals) / actual_vals)) * 100
+  
+  # Store results
+  svr_results <- rbind(svr_results, data.frame(
+    Kernel = k,
+    RMSE = round(rmse_val, 3),
+    MAE  = round(mae_val, 3),
+    MAPE = round(mape_val, 2)
+  ))
+}
+
+# Display formatted table of SVR accuracy metrics
+knitr::kable(svr_results, caption = "SVR Forecast Accuracy by Kernel Type") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## Step 3: Predict and Invert Scaling
+
+```{r svr-predict}
+# Refit best model (linear kernel)
+svr_model <- svm(x = X_train, y = y_train, kernel = "linear")
+svr_preds_scaled <- predict(svr_model, X_test)
+
+# Inverse scaling
+avg_mean <- preproc$mean["avg_price"]
+avg_sd   <- preproc$std["avg_price"]
+final_preds <- svr_preds_scaled * avg_sd + avg_mean
+actual_vals <- y_test * avg_sd + avg_mean
+
+# Generate predictions for test set using SVR model
+svr_preds_scaled <- predict(svr_model, X_test)
+
+# Extract scaling parameters
+avg_mean <- preproc$mean["avg_price"]
+avg_sd   <- preproc$std["avg_price"]
+
+# Inverse scale predictions and actual values
+final_preds <- svr_preds_scaled * avg_sd + avg_mean
+actual_vals <- y_test * avg_sd + avg_mean
+```
+
+## Step 4: Accuracy
+
+```{r svr-accuracy}
+# Calculate accuracy metrics for SVR predictions
+svr_metrics <- data.frame(
+  RMSE = round(RMSE(final_preds, actual_vals), 3),
+  MAE = round(MAE(final_preds, actual_vals), 3),
+  MAPE = round(mean(abs((final_preds - actual_vals) / actual_vals)) * 100, 2)
+)
+# Display metrics
+svr_metrics
+```
+
+## Step 5: Plot
+
+```{r svr-plot}
+# Prepare data for plotting
+plot_df <- tibble(Week = 1:length(actual_vals), Actual = actual_vals, Predicted = final_preds)
+
+# Plot actual vs predicted values for SVR model
+ggplot(plot_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, colour = "Actual")) +
+  geom_line(aes(y = Predicted, colour = "Predicted"), linetype = "dashed") +
+  labs(title = "SVR Forecast vs Actual Fuel Prices", x = "Week", y = "Fuel Price") +
+  scale_colour_manual(values = c("Actual" = "black", "Predicted" = "blue")) +
+  theme_minimal()
+```
+
+# Segment 11: Hybrid Forecasting (Ensemble of SVR and LSTM)
+
+## Step 1: Align Predictions from SVR and LSTM
+
+```{r hybrid-align}
+# Align SVR and LSTM predictions to the same length
+n_forecast <- min(length(test_y_actual), length(final_preds))  # LSTM vs SVR (linear)
+
+# Create dataframe with aligned predictions and actual values
+hybrid_df <- data.frame(
+  SVR = as.numeric(final_preds[1:n_forecast]),      # SVR predictions (re-scaled)
+  LSTM = as.numeric(predicted[1:n_forecast]),       # LSTM predictions (re-scaled)
+  Actual = as.numeric(test_y_actual[1:n_forecast])  # True values
+)
+```
+
+## Step 2: Create Hybrid Forecast (Hybrid Prediction = 0.8 * SVR + 0.2 * LSTM)
+
+```{r hybrid-forecast}
+# Create hybrid forecast by averaging SVR and LSTM predictions
+hybrid_df <- hybrid_df %>%
+  mutate(Hybrid = 0.8 * SVR + 0.2 * LSTM) # Weighted in Favour of SVR
+```
+
+## Step 3: Evaluate Hybrid Forecast Accuracy
+
+```{r hybrid-accuracy}
+# Calculate accuracy metrics for hybrid forecast
+hybrid_metrics <- data.frame(
+  RMSE = round(RMSE(hybrid_df$Hybrid, hybrid_df$Actual), 3),
+  MAE = round(MAE(hybrid_df$Hybrid, hybrid_df$Actual), 3),
+  MAPE = round(mean(abs((hybrid_df$Hybrid - hybrid_df$Actual) / hybrid_df$Actual)) * 100, 2)
+)
+# Display metrics
+hybrid_metrics
+```
+
+## Step 4: Plot Hybrid Forecast vs Actual
+
+```{r hybrid-plot}
+# Prepare data for plotting
+plot_df <- tibble(
+  Week = 1:n_forecast,
+  Actual = hybrid_df$Actual,
+  Hybrid = hybrid_df$Hybrid
+)
+
+# Plot actual vs hybrid forecast
+ggplot(plot_df, aes(x = Week)) +
+  geom_line(aes(y = Actual, colour = "Actual")) +
+  geom_line(aes(y = Hybrid, colour = "Hybrid"), linetype = "dashed") +
+  labs(title = "Hybrid Forecast vs Actual (SVR + LSTM)",
+       x = "Week", y = "Fuel Price") +
+  scale_colour_manual(values = c("Actual" = "black", "Hybrid" = "darkgreen")) +
+  theme_minimal()
+```
+
+# Segment 12: All Models Comparison & Visual Summary
+
+## Step 1: Consolidate Accuracy Metrics
+
+```{r gather-all-metrics}
+# Construct MAPE comparison dataframe
+mape_values <- data.frame(
+  Model = c(
+    "Random Forest (700)", 
+    "LSTM", 
+    "SVR (Linear)", 
+    "Hybrid (SVR + LSTM)", 
+    "Auto SARIMAX (Brent)"
+  ),
+  MAPE = c(
+    tail(rf_results$MAPE, 1),      # Best Random Forest
+    lstm_metrics$MAPE,
+    svr_metrics$MAPE,
+    hybrid_metrics$MAPE,
+    brent_metrics$MAPE             # From SARIMAX external model
+  )
+)
+```
+
+## Step 2: Plot Histogram for All Models
+
+```{r barplot-all-models, fig.height=6}
+# Plot histogram
+ggplot(mape_values, aes(x = reorder(Model, -MAPE), y = MAPE, fill = Model)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_text(aes(label = MAPE), vjust = -0.3) +
+  labs(
+    title = "MAPE Comparison of ML, Hybrid, and SARIMAX (Brent) Models",
+    x = "Model",
+    y = "MAPE (%)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Step 3: Final Forecasts Using The Best – 15 Weeks Ahead
+
+```{r forecast-svr-linear}
+# --- Setup ---
+# Get last 3 actual values from the dataset to serve as lags
+last_obs <- tail(fuel_data, 3)
+
+# Create input frame for preprocessing with dummy avg_price column (required by preproc)
+future_lags <- data.frame(
+  avg_price = 0,
+  lag_1 = last_obs$avg_price[3],
+  lag_2 = last_obs$avg_price[2],
+  lag_3 = last_obs$avg_price[1]
+)
+
+# Scale lagged inputs
+future_scaled <- predict(preproc, future_lags)
+current_input <- as.numeric(future_scaled[, c("lag_1", "lag_2", "lag_3")])
+
+# Forecast Loop
+future_preds <- c()
+for (i in 1:15) {
+  # Predict next value using SVR
+  pred_scaled <- predict(svr_model, as.data.frame(t(current_input)))
+  # Inverse scaling
+  pred_rescaled <- pred_scaled * preproc$std["avg_price"] + preproc$mean["avg_price"]
+  future_preds <- c(future_preds, pred_rescaled)
+  
+  # Update lags (rolling forecast)
+  current_input <- c(pred_scaled, current_input[1:2])
+}
+
+# Format Output
+future_dates <- seq(max(fuel_data$Date) + 7, by = 7, length.out = 15)
+svr_forecast_15 <- data.frame(Date = future_dates, SVR_Prediction = round(future_preds, 2))
+
+# Display forecast table
+knitr::kable(svr_forecast_15, caption = "15-Week Ahead Forecast – SVR (Linear)")
+```
+
+## Step 4: Final Forecasts Plot – 15 Weeks Ahead
+
+```{r plot-svr-15weeks}
+# Combine historical and forecast data
+historical_plot_df <- fuel_data %>%
+  select(Date, avg_price) %>%
+  rename(Price = avg_price)
+
+forecast_plot_df <- svr_forecast_15 %>%
+  rename(Price = SVR_Prediction)
+
+# Add source labels
+historical_plot_df$Type <- "Historical"
+forecast_plot_df$Type <- "Forecast"
+
+# Merge for plotting
+combined_plot_df <- bind_rows(historical_plot_df, forecast_plot_df)
+
+# Plot: historical + forecast as lines only
+ggplot(combined_plot_df, aes(x = Date, y = Price, colour = Type)) +
+  geom_line(size = 0.8) +
+  scale_colour_manual(values = c("Historical" = "skyblue", "Forecast" = "red")) +
+  labs(
+    title = "Historical Prices + 15-Week Ahead Forecast (SVR Linear)",
+    x = "Date",
+    y = "Fuel Price (Pence per Litre)",
+    colour = "Colour"
+  ) +
+  theme_minimal(base_size = 13)
+```

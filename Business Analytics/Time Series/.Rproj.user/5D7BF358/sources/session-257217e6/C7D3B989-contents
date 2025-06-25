@@ -1,0 +1,86 @@
+### --- SEGMENT 1: Load Data, Preprocess Date, Convert to Time Series ---
+rm(list = ls())
+gc()
+
+# STEP 1: List of Required Packages
+packages <- c("readxl", "dplyr", "lubridate", "zoo", 
+              "ggplot2", "forecast", "tsoutliers", "tidyr")
+
+# STEP 2: Install and Load Packages
+load_packages <- function(pkg_list) {
+  for (pkg in pkg_list) {
+    if (!require(pkg, character.only = TRUE)) {
+      install.packages(pkg, dependencies = TRUE)
+      library(pkg, character.only = TRUE)
+    }
+  }
+}
+
+load_packages(packages)
+
+# STEP 3: Load Dataset (skip metadata rows, adjust column names)
+fuel_data <- read_excel("fuel_price.xlsx", sheet = "Table 1 Weekly", skip = 5)
+View(fuel_data)
+colnames(fuel_data) <- c("Week_Ending", "Avg_Fuel_Price", "Quantity_Demand", "Fuel_Sales")
+
+# STEP 4: Rename and Select Relevant Columns
+fuel_data <- fuel_data %>%
+  rename(Date = Week_Ending, avg_price = Avg_Fuel_Price) %>%
+  select(Date, avg_price)
+
+# STEP 5: Convert Data Types and Sort
+fuel_data <- fuel_data %>%
+  mutate(Date = as.Date(Date),
+         avg_price = as.numeric(avg_price)) %>%
+  arrange(Date)
+
+# ----- 🔍 STEP 6: Explore Missing Values -----
+# Reason: Understand where interpolation may be necessary
+fuel_data %>%
+  summarise_all(~ sum(is.na(.))) %>%
+  pivot_longer(everything(), names_to = "Column", values_to = "Missing_Count") %>%
+  ggplot(aes(x = reorder(Column, -Missing_Count), y = Missing_Count)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_text(aes(label = Missing_Count), vjust = -0.5) +
+  labs(title = "Missing Values by Column", x = "Column", y = "Missing Count") +
+  theme_minimal()
+
+# ----- 💧 STEP 7: Handle Missing Values via Interpolation -----
+# Reason: Linear interpolation preserves trend while filling gaps
+fuel_data$avg_price <- na.approx(fuel_data$avg_price, na.rm = FALSE)
+
+# ----- 🔍 STEP 8: Visualize Outliers Before Handling -----
+# Reason: Identify extreme values that could distort model accuracy
+fuel_data %>%
+  pivot_longer(cols = avg_price, names_to = "Variable", values_to = "Value") %>%
+  ggplot(aes(x = Variable, y = Value)) +
+  geom_boxplot(fill = "orange", alpha = 0.6, outlier.color = "red") +
+  labs(title = "Boxplot of Average Fuel Prices", y = "Pence per Litre", x = "") +
+  theme_minimal()
+
+# ----- 🚨 STEP 9: Handle Outliers Using IQR Method -----
+# Reason: Winsorization caps extreme values while retaining dataset integrity
+Q1 <- quantile(fuel_data$avg_price, 0.25, na.rm = TRUE)
+Q3 <- quantile(fuel_data$avg_price, 0.75, na.rm = TRUE)
+IQR_val <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR_val
+upper_bound <- Q3 + 1.5 * IQR_val
+
+fuel_data$avg_price <- ifelse(fuel_data$avg_price > upper_bound, upper_bound,
+                              ifelse(fuel_data$avg_price < lower_bound, lower_bound,
+                                     fuel_data$avg_price))
+
+# ----- 📈 STEP 10: Convert to Weekly Time Series -----
+# Reason: Required for ts forecasting models (e.g. ARIMA, ETS)
+start_year <- year(min(fuel_data$Date))
+start_week <- isoweek(min(fuel_data$Date))
+
+ts_fuel <- ts(fuel_data$avg_price,
+              start = c(start_year, start_week),
+              frequency = 52)
+
+# ----- 🖼️ STEP 11: Visualize Cleaned Weekly Time Series -----
+autoplot(ts_fuel) +
+  ggtitle("Cleaned Weekly Average Fuel Price") +
+  xlab("Time (Weeks)") +
+  ylab("Average Price (Pence per Litre)")

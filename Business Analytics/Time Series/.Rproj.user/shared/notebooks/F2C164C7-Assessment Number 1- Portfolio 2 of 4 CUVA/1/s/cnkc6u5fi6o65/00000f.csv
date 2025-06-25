@@ -1,0 +1,4 @@
+"0","# Create a box plot to visualize the spread and outliers of car prices"
+"0","ggplot(Used_cars, aes(y = `Price_in_GBP`)) +"
+"0","  geom_boxplot(fill = ""lightblue"", color = ""darkblue"") +  # Plot box plot with custom colors"
+"0","  labs(title = ""Price Box Plot"", y = ""Price (£)"")  # Add title and y-axis label"
